@@ -11,7 +11,7 @@ import { HttpError } from '../utils/httpErrors.js';
 import { notify, notifyAdmins } from '../utils/notify.js';
 import { pageMeta, parsePagination } from '../utils/pagination.js';
 import { createTeamSchema, updateTeamSchema } from '../schemas/rescue.schema.js';
-import { transitionRequest } from './requestService.js';
+import { decorateRequest, transitionRequest, viewerContext } from './requestService.js';
 
 type CreateTeamInput = z.infer<typeof createTeamSchema>;
 type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
@@ -152,24 +152,53 @@ export async function listAssignments(viewerId: string, viewerRole: string, quer
     ...(query.status ? { status: query.status as string } : {}),
     ...(query.requestId ? { requestId: query.requestId as string } : {}),
   };
+  const viewer = await viewerContext(viewerId, viewerRole);
   const [total, assignments] = await Promise.all([
     prisma.rescueAssignment.count({ where }),
-    prisma.rescueAssignment.findMany({ where, include: { team: true, request: true, report: true }, orderBy: { assignedAt: 'desc' }, skip, take: limit }),
+    prisma.rescueAssignment.findMany({
+      where,
+      include: {
+        team: true,
+        request: {
+          include: {
+            requester: { select: { id: true, name: true, phone: true } },
+            assignments: { select: { id: true, status: true, teamId: true, assignedAt: true }, orderBy: { assignedAt: 'desc' } },
+          },
+        },
+        report: true,
+      },
+      orderBy: { assignedAt: 'desc' },
+      skip,
+      take: limit,
+    }),
   ]);
-  return { assignments, meta: pageMeta(total, { page, limit, skip }) };
+  // SE-5 also applies to the nested request: phone + exact coords are visible
+  // only to ADMIN, the requester, and the assigned team (BE-04).
+  return { assignments: assignments.map((a) => ({ ...a, request: decorateRequest(viewer, a.request) })), meta: pageMeta(total, { page, limit, skip }) };
 }
 
 export async function getAssignment(viewerId: string, viewerRole: string, id: string) {
   const assignment = await prisma.rescueAssignment.findUnique({
     where: { id },
-    include: { team: true, request: true, report: true, assignedBy: { select: { id: true, name: true } } },
+    include: {
+      team: true,
+      request: {
+        include: {
+          requester: { select: { id: true, name: true, phone: true } },
+          assignments: { select: { id: true, status: true, teamId: true, assignedAt: true }, orderBy: { assignedAt: 'desc' } },
+        },
+      },
+      report: true,
+      assignedBy: { select: { id: true, name: true } },
+    },
   });
   if (!assignment) throw new HttpError(404, 'Assignment not found');
   if (viewerRole === 'RESCUE_TEAM') {
     const mine = await teamOfUser(viewerId);
     if (!mine || mine.id !== assignment.teamId) throw new HttpError(403, 'This assignment belongs to another team');
   }
-  return assignment;
+  const viewer = await viewerContext(viewerId, viewerRole);
+  return { ...assignment, request: decorateRequest(viewer, assignment.request) };
 }
 
 async function progressAssignment(actorId: string, id: string, to: AssignmentStatus, action: string) {

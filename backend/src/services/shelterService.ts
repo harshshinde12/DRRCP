@@ -43,7 +43,26 @@ export async function createShelter(actorId: string, actorRole: string, input: C
   return withAvailability(shelter);
 }
 
-export async function listShelters(query: Record<string, unknown>) {
+type ShelterViewer = { id: string; role: string } | null;
+
+/**
+ * S-01: manager email is PII — public listings expose id + name only.
+ * Email is included only for ADMIN and the owning SHELTER_MANAGER.
+ */
+function maskManager<T extends { managerId: string; manager: { id: string; name: string; email: string } | null }>(
+  viewer: ShelterViewer,
+  shelter: T,
+) {
+  const canSeeEmail =
+    viewer != null && (viewer.role === 'ADMIN' || viewer.id === shelter.managerId);
+  const { manager, ...rest } = shelter;
+  return {
+    ...rest,
+    manager: manager ? (canSeeEmail ? manager : { id: manager.id, name: manager.name }) : manager,
+  };
+}
+
+export async function listShelters(query: Record<string, unknown>, viewer: ShelterViewer = null) {
   const { page, limit, skip } = parsePagination(query);
   const where = {
     ...(query.operatingStatus ? { operatingStatus: query.operatingStatus as string } : {}),
@@ -57,16 +76,16 @@ export async function listShelters(query: Record<string, unknown>) {
     prisma.shelter.count({ where }),
     prisma.shelter.findMany({ where, include: { manager: { select: { id: true, name: true, email: true } } }, orderBy: { updatedAt: 'desc' }, skip, take: limit }),
   ]);
-  return { shelters: shelters.map(withAvailability), meta: pageMeta(total, { page, limit, skip }) };
+  return { shelters: shelters.map((s) => withAvailability(maskManager(viewer, s))), meta: pageMeta(total, { page, limit, skip }) };
 }
 
-export async function getShelter(id: string) {
+export async function getShelter(id: string, viewer: ShelterViewer = null) {
   const shelter = await prisma.shelter.findUnique({
     where: { id },
     include: { manager: { select: { id: true, name: true, email: true } } },
   });
   if (!shelter) throw new HttpError(404, 'Shelter not found');
-  return withAvailability(shelter);
+  return withAvailability(maskManager(viewer, shelter));
 }
 
 function assertCanWrite(actorId: string, actorRole: string, shelterManagerId: string) {

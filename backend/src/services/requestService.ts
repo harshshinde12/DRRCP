@@ -19,9 +19,9 @@ const REQUEST_SORTS = ['createdAt', 'updatedAt', 'priority', 'peopleAffected'] a
 
 type AssignmentLite = { id: string; status: string; teamId: string; assignedAt: Date };
 
-type ViewerCtx = { id: string; role: string; teamId: string | null };
+export type ViewerCtx = { id: string; role: string; teamId: string | null };
 
-async function viewerContext(viewerId: string, viewerRole: string): Promise<ViewerCtx> {
+export async function viewerContext(viewerId: string, viewerRole: string): Promise<ViewerCtx> {
   let teamId: string | null = null;
   if (viewerRole === 'RESCUE_TEAM') {
     const team = await prisma.rescueTeam.findUnique({ where: { userId: viewerId }, select: { id: true } });
@@ -37,7 +37,7 @@ async function viewerContext(viewerId: string, viewerRole: string): Promise<View
  * - privacy masking (SRS SE-5): requester phone + exact coords are visible
  *   ONLY to ADMIN, the owning CITIZEN, and the assigned RESCUE_TEAM.
  */
-function decorateRequest<T extends { requesterId: string; status: string; latitude: number | null; longitude: number | null; requester: { phone?: string | null; [key: string]: unknown } | null; assignments: AssignmentLite[] }>(
+export function decorateRequest<T extends { requesterId: string; status: string; latitude: number | null; longitude: number | null; requester: { phone?: string | null; [key: string]: unknown } | null; assignments: AssignmentLite[] }>(
   viewer: ViewerCtx,
   req: T,
 ) {
@@ -138,7 +138,15 @@ export async function listRequests(viewerId: string, viewerRole: string, query: 
   const disasterId = query.disasterId as string | undefined;
   const search = (query.search as string | undefined)?.trim();
 
-  const scoped = viewerRole === 'CITIZEN' ? { requesterId: viewerId } : {};
+  const viewer = await viewerContext(viewerId, viewerRole);
+  const scoped =
+    viewerRole === 'CITIZEN'
+      ? { requesterId: viewerId }
+      : viewerRole === 'RESCUE_TEAM'
+        ? viewer.teamId
+          ? { assignments: { some: { teamId: viewer.teamId } } }
+          : { id: '__no-team-profile__' } // team login without a RescueTeam row sees nothing
+        : {};
   const where = {
     ...scoped,
     ...(status ? { status } : {}),
@@ -147,7 +155,6 @@ export async function listRequests(viewerId: string, viewerRole: string, query: 
     ...(disasterId ? { disasterId } : {}),
     ...(search ? { OR: [{ description: { contains: search } }, { location: { contains: search } }] } : {}),
   };
-  const viewer = await viewerContext(viewerId, viewerRole);
   const [total, requests] = await Promise.all([
     prisma.emergencyRequest.count({ where }),
     prisma.emergencyRequest.findMany({
@@ -165,7 +172,7 @@ export async function listRequests(viewerId: string, viewerRole: string, query: 
   return { requests: requests.map((r) => decorateRequest(viewer, r)), meta: pageMeta(total, { page, limit, skip }) };
 }
 
-/** Owner (citizen), ADMIN, or any rescue-team member may view (SE-5: teams see assigned work). */
+/** Owner (citizen), ADMIN, or the assigned rescue team may view (S-02: teams see only own work). */
 export async function getRequest(viewerId: string, viewerRole: string, id: string) {
   const request = await prisma.emergencyRequest.findUnique({
     where: { id },
@@ -180,6 +187,10 @@ export async function getRequest(viewerId: string, viewerRole: string, id: strin
     throw new HttpError(403, 'You can only view your own requests');
   }
   const viewer = await viewerContext(viewerId, viewerRole);
+  if (viewerRole === 'RESCUE_TEAM') {
+    const linked = viewer.teamId != null && request.assignments.some((a) => a.teamId === viewer.teamId);
+    if (!linked) throw new HttpError(403, 'This request is not assigned to your team');
+  }
   return decorateRequest(viewer, request);
 }
 

@@ -9,7 +9,7 @@ export const createRequestSchema = z.object({
   longitude: z.coerce.number().min(-180).max(180).optional(),
   peopleAffected: z.coerce.number().int().min(1).max(100000),
   injuryPresent: z.coerce.boolean().default(false),
-  injurySeverity: z.enum(['NONE', 'MINOR', 'MODERATE', 'SEVERE']).optional(),
+  injurySeverity: z.enum(['NONE', 'MINOR', 'MODERATE', 'SEVERE', 'UNKNOWN']).optional(),
   disasterId: z.string().min(1).optional(),
 });
 

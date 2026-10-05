@@ -15,7 +15,8 @@ export async function createShelter(req: Request, res: Response) {
 
 export async function listShelters(req: Request, res: Response) {
   const query = listSheltersQuery.parse(req.query);
-  const { shelters, meta } = await shelterService.listShelters(query as Record<string, unknown>);
+  const viewer = req.user ? { id: req.user.id, role: req.user.role } : null;
+  const { shelters, meta } = await shelterService.listShelters(query as Record<string, unknown>, viewer);
   return ok(res, shelters, 200, meta);
 }
 
@@ -25,7 +26,8 @@ export async function nearbyShelters(req: Request, res: Response) {
 }
 
 export async function getShelter(req: Request, res: Response) {
-  return ok(res, { shelter: await shelterService.getShelter(req.params.id) });
+  const viewer = req.user ? { id: req.user.id, role: req.user.role } : null;
+  return ok(res, { shelter: await shelterService.getShelter(req.params.id, viewer) });
 }
 
 export async function updateShelter(req: Request, res: Response) {

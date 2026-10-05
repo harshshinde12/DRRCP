@@ -86,7 +86,7 @@ export interface Shelter {
   totalCapacity: number; currentOccupancy: number; availableCapacity: number;
   facilities: string; operatingStatus: string; emergencyOverride: boolean;
   createdAt: string; updatedAt: string;
-  manager?: { id: string; name: string; email: string };
+  manager?: { id: string; name: string; email?: string };
   distanceKm?: number;
 }
 

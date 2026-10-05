@@ -33,7 +33,7 @@ export default function NewRequest() {
 
   const { register, handleSubmit, watch, setValue, trigger, formState: { errors } } = useForm<Form>({
     resolver: zodResolver(schema),
-    defaultValues: { emergencyType: '', peopleAffected: 1, injuryPresent: false, injurySeverity: 'NONE', location: '', latitude: null, longitude: null, description: '' },
+    defaultValues: { emergencyType: '', peopleAffected: 1, injuryPresent: false, injurySeverity: 'UNKNOWN', location: '', latitude: null, longitude: null, description: '' },
   });
   const injuryPresent = watch('injuryPresent');
   const injurySeverities = options('injurySeverities');

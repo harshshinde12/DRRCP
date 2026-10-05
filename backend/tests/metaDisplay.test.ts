@@ -100,19 +100,18 @@ describe('contact/location privacy (SE-5)', () => {
     expect(assigned.requester.phone).toBe('+91-999');
     expect(assigned.latitude).toBeCloseTo(19.13);
 
-    // a team that is NOT assigned to this request sees masked fields
+    // a team that is NOT assigned to this request is fenced out entirely (S-02)
     const other = await makeUser({ name: 'Other Team', email: 'other-team@t.local', role: 'RESCUE_TEAM' });
     await prisma.rescueTeam.create({ data: { name: 'T2', teamType: 'MEDICAL', memberCount: 4, capability: 'TRIAGE', currentLocation: 'Base2', userId: other.id } });
     const otherTok = await tokenFor(app, 'other-team@t.local');
-    const masked = (await request(app).get(`/api/requests/${reqId}`).set(bearer(otherTok))).body.data.request;
-    expect(masked.requester.phone).toBeNull();
-    expect(masked.latitude).toBeNull();
-    expect(masked.longitude).toBeNull();
-    // textual address stays visible for dispatch context
-    expect(masked.location).toBe('Andheri West');
-
-    const maskedList = (await request(app).get('/api/requests').set(bearer(otherTok))).body.data;
-    expect(maskedList[0].latitude).toBeNull();
+    expect((await request(app).get(`/api/requests/${reqId}`).set(bearer(otherTok))).status).toBe(403);
+    // …and it is absent from their list (scoped to own assignments)
+    const scopedList = (await request(app).get('/api/requests').set(bearer(otherTok))).body;
+    expect(scopedList.meta.total).toBe(0);
+    expect(scopedList.data).toHaveLength(0);
+    // textual address stays visible for dispatch context (assigned viewer still masked-safe)
+    const assignedList = (await request(app).get('/api/requests').set(bearer(tok.team))).body.data;
+    expect(assignedList[0].location).toBe('Andheri West');
   });
 });
 
