@@ -92,10 +92,13 @@ Deferred from Release 1.0 (SRS §6 scope + report), in suggested order:
    over sockets/SSE instead of 10s polling.
 4. **Load test PE-1.** k6 scenario for 500 concurrent users; consider Postgres
    + read replicas if SQLite becomes the bottleneck.
-5. **First-login tour (UD-2)** and per-screen help links (UI-2) on top of the
-   existing Help page.
+5. **First-login tour (UD-2).** The Help page now has per-screen "❓" links;
+   add the overlay walkthrough on top (e.g. driver.js).
 6. **Offline-first submission queue** for intermittent connectivity (AS-1):
    outbox in IndexedDB with retry.
 7. **Standby deployment** for the 99% availability target; automated DB backups.
+8. **TLS everywhere + short-lived tokens.** Terminate TLS at the reverse proxy
+   (SE-1/CI-1), add `trust proxy`, consider DOMPurify on rich notes and
+   access-token rotation (S-06).
 8. **Firefox/WebKit E2E projects**, Lighthouse CI perf budgets, i18n
    (Hindi/Marathi) for citizen-facing pages.

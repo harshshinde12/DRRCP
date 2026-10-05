@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, DataTable, EmptyState, EnumBadge, ErrorState, formatApiError, useToast, type Column } from '../../components/ui.tsx';
+import { useMeta } from '../../lib/meta.tsx';
 import { useTaskAction, useVolunteerTasks } from '../../lib/queries.ts';
 import type { VolunteerTask } from '../../lib/types.ts';
 
@@ -11,10 +12,12 @@ const columns: Column<VolunteerTask>[] = [
 
 export default function Tasks() {
   const { push } = useToast();
+  const { options } = useMeta();
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const q = useVolunteerTasks({ status: status || undefined, page, limit: 15 });
   const act = useTaskAction();
+  // F-07: chips come from meta — every status (incl. DECLINED/CANCELLED) is filterable.
 
   async function run(id: string, kind: 'accept' | 'decline' | 'status', body?: unknown, label?: string) {
     try {
@@ -45,7 +48,7 @@ export default function Tasks() {
       <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">🤝 My tasks</h1>
       <Card>
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter tasks">
-          {['', 'ASSIGNED', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].map((s) => (
+          {['', ...options('volunteerTaskStatuses').map((o) => o.value)].map((s) => (
             <button key={s || 'ALL'} onClick={() => { setStatus(s); setPage(1); }} aria-pressed={status === s}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${status === s ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`}>
               {s || 'All'}

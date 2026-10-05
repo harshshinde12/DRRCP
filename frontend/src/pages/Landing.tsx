@@ -2,15 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getPaged } from '../lib/api-client.ts';
 import { homeForRole, useAuth } from '../lib/auth.tsx';
+import { HELPLINES } from '../lib/strings.ts';
 import type { Shelter } from '../lib/types.ts';
 import { Card, CardSkeleton, ErrorState, StatCard } from '../components/ui.tsx';
-
-const HELPLINES = [
-  { n: '112', d: 'National emergency' },
-  { n: '1078', d: 'Disaster helpline' },
-  { n: '102', d: 'Medical / ambulance' },
-  { n: '101', d: 'Fire' },
-];
 
 export default function Landing() {
   const { isAuthenticated, user } = useAuth();

@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { useMeta } from '../../lib/meta.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import type { Allocation, InventoryRecord, ReliefItem, ResourceRequest } from '../../lib/types.ts';
@@ -46,6 +47,7 @@ function useInvalidateAll() {
 
 export default function Relief() {
   const { push } = useToast();
+  const { options } = useMeta();
   const invalidateAll = useInvalidateAll();
   const [modal, setModal] = useState<'item' | 'stock' | 'alloc' | null>(null);
   // F-04: real pagination state (was page={1} dead controls).
@@ -140,7 +142,8 @@ export default function Relief() {
       <Modal open={modal === 'item'} onClose={() => setModal(null)} title="Register relief item">
         <form onSubmit={itemForm.handleSubmit(submitItem)} className="space-y-3">
           <Field label="Item name" error={itemForm.formState.errors.itemName?.message}><Input {...itemForm.register('itemName')} /></Field>
-          <Field label="Category" error={itemForm.formState.errors.category?.message}><Select {...itemForm.register('category')}>{['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT'].map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
+          {/* F-07: values from /api/meta (rendered raw to preserve catalogue text). */}
+          <Field label="Category" error={itemForm.formState.errors.category?.message}><Select {...itemForm.register('category')}>{options('itemCategories').map((c) => <option key={c.value} value={c.value}>{c.value}</option>)}</Select></Field>
           <Field label="Unit" error={itemForm.formState.errors.unit?.message}><Input placeholder="kg, litres, kits…" {...itemForm.register('unit')} /></Field>
           <Button type="submit" className="w-full">Save item</Button>
         </form>

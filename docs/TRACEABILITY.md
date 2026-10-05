@@ -9,6 +9,36 @@ Legend for coverage columns: **E** = REST endpoint · **UI** = frontend page ·
 **UT** = backend Vitest unit/integration test · **E2E** = Playwright spec.
 A ✅ means covered; ⚠️ means partial — see §4 Gaps.
 
+## 0. FR numbering — canonical map (R-01)
+
+**Canonical: AGENTS.md §6 FR-01…FR-18.** The experiments report
+(`Disaster_Relief_Rescue_Coordination_Platform_DETAILED_Experiments_1_to_8_Report.docx`,
+§3.2) reuses the same IDs with different meanings, so every cross-doc citation
+is resolved through this table. The SRS itself uses dotted IDs (shown per row
+in §1); the report IDs below are informational only.
+
+| Report ID | Report meaning (§3.2) | Canonical AGENTS ID(s) |
+|-----------|----------------------|------------------------|
+| FR-01 | Users register and authenticate | FR-01 (same) |
+| FR-02 | Role-based access control | FR-02 (same) |
+| FR-03 | Citizens submit emergency requests | FR-03 (same) |
+| FR-04 | Requests store type/description/location/people/severity/timestamps | FR-03 (fields stored on submit; no standalone row) |
+| FR-05 | Admins verify, classify and prioritize | FR-04 |
+| FR-06 | Admins assign available rescue teams | FR-07 (dispatch half) |
+| FR-07 | Teams acknowledge and update mission status | FR-07 (mission half) |
+| FR-08 | Rescue outcomes recorded via reports | FR-08 (same) |
+| FR-09 | Volunteers keep skills/availability, receive tasks | FR-09 + FR-10 |
+| FR-10 | Shelter managers maintain capacity/occupancy/facilities | FR-11 |
+| FR-11 | Shelters raise resource requirements | FR-13 |
+| FR-12 | Relief-material inventory maintained | FR-14 |
+| FR-13 | Resource allocations recorded | FR-15 |
+| FR-14 | Citizens track request status | FR-05 |
+| FR-15 | Operational notifications generated | FR-16 |
+| FR-16 | Admin dashboards and reports | FR-17 |
+| FR-17 | Timestamps/history retained | FR-18 (+ FR-05 history UI) |
+| FR-18 | Invalid/duplicate/cancelled requests handled | FR-04 (admin REJECTED/DUPLICATE) + FR-05 (citizen cancel) |
+| — (report has none) | — | FR-06 team registration, FR-12 shelter search (AGENTS-only splits) |
+
 ## 1. Functional requirements
 
 | FR | SRS ID(s) | Requirement (short) | Endpoints | UI pages | UT | E2E | Status |
@@ -18,9 +48,9 @@ A ✅ means covered; ⚠️ means partial — see §4 Gaps.
 | FR-03 | Request.Submit.* (Type, Location, People, Injury, Confirm, Store) | Citizen submits request (type+location+people+injury, confirm step) | `POST /api/requests` (Zod-validated, auto-links ACTIVE disaster) | `NewRequest` 3-step wizard | `lifecycle` | `full-story`, `exception-paths` | ✅ |
 | FR-04 | Request.Verify, Request.Verify.Duplicate, Request.Priority | Admin verifies VERIFIED/DUPLICATE(link)/REJECTED + priority | `POST /:id/verify`, `PATCH /:id/priority` | RequestQueue triage drawer | `lifecycle` | `full-story`, `exception-paths` (duplicate) | ✅ |
 | FR-05 | Request.Status.Track, Request.Status.Notify, Request.History | Citizen tracks own status + history; notified on change | `GET /requests` (own-scope), `GET /:id`, `GET /:id/history`, notify on `transitionRequest` | MyRequests, RequestDetail (StatusTimeline + history) | `lifecycle`, `metaDisplay` | `full-story` (live timeline) | ✅ |
-| FR-06 | Team.Register | Admin registers rescue teams | `POST /api/teams`, `POST /admin/users` (RESCUE_TEAM bundle) | Teams (register modal), Users (provision) | `authLockdown` | — (admin UI create covered in roles smoke) | ✅ |
-| FR-07 | Team.Availability, Team.Match, Team.Assign.Block, Team.Status.Update | Assign AVAILABLE teams (override logged); team updates mission status | `GET /requests/:id/matching-teams`, `POST /:id/assign` (409/override+reason), `POST /assignments/:id/acknowledge`, `PATCH /assignments/:id/status` | RequestQueue assign + override modal; MissionDetail one-tap updates | `lifecycle` | `full-story`, `exception-paths` (override, support) | ✅ |
-| FR-08 | Team.Report | Team files rescue report on completion | `POST /assignments/:id/report` (exactly one; 409 on repeat) | MissionDetail report form | `lifecycle` | `full-story` | ✅ |
+| FR-06 | Team.Register | Admin registers rescue teams | `POST /api/teams`, `POST /admin/users` (RESCUE_TEAM bundle) | Teams (register modal), Users (provision) | `authLockdown` | `batch4` (Teams availability flow; UI create itself is API-covered, no dedicated E2E) | ✅ |
+| FR-07 | Team.Availability, Team.Match, Team.Assign.Block, Team.Status.Update, Request.Assign, Team.History | Assign AVAILABLE teams (override logged); team updates mission status; VERIFIED→ASSIGNED moves the request; team detail carries assignment history | `GET /requests/:id/matching-teams`, `POST /:id/assign` (409/override+reason), `POST /assignments/:id/acknowledge`, `PATCH /assignments/:id/status`, `GET /teams/:id` (latest 20 assignments) | RequestQueue assign + override modal; MissionDetail one-tap updates | `lifecycle` | `full-story`, `exception-paths` (override, support), `batch4` (availability) | ✅ |
+| FR-08 | Team.Report (Request.Resolve: accepted deviation, §4 #10) | Team files rescue report on completion — the ONLY path to RESOLVED | `POST /assignments/:id/report` (exactly one; 409 on repeat) | MissionDetail report form | `lifecycle` | `full-story` | ✅ |
 | FR-09 | Volunteer.Register | Volunteer registration with skills/availability/service-area | `POST /auth/register` (role=VOLUNTEER + profile fields) | Register (role-specific fields), Profile | `authLockdown` | `full-story` (register), `workflows` (profile) | ✅ |
 | FR-10 | Volunteer.Task.Assign, .Restrict (SF-2), .Accept, .Status | Admin assigns skill-matched low-risk tasks; volunteer accept/decline/status | `POST /volunteer-tasks` (skill-match + low-risk 422), `POST /:id/accept\|decline`, `PATCH /:id/status`, `GET /volunteers/suggest` | Volunteers (suggest+assign), Tasks (accept/decline/start/complete) | `relief` | `workflows` | ✅ |
 | FR-11 | Shelter.Register, .Occupancy.Update, .Capacity.Block, .Status | Shelter register + occupancy/facilities/status; capacity block + override | `POST /shelters`, `PATCH /shelters/:id` (422 unless `emergencyOverride`), `DELETE /shelters/:id` | ShelterManagerHome (gauge+check-in/out), Shelters (admin modal+override) | `relief` | `exception-paths` (block + override), `workflows` | ✅ |
@@ -29,7 +59,7 @@ A ✅ means covered; ⚠️ means partial — see §4 Gaps.
 | FR-14 | Inventory.Register, Inventory.Shortage | NGO/admin registers items + inventory; shortage detection | `POST /relief-items`, `POST /inventory`, `GET /inventory/shortages` | NgoInventory, NgoFieldRequests, Relief (shortages panel) | `relief` | `workflows` | ✅ |
 | FR-15 | Allocation.Create, Allocation.Block, Allocation.History | Admin/NGO allocates stock (block over-allocation), full history | `POST /allocations` (atomic txn; 422 over stock/need), `PATCH /:id/status` (cancel restores), `GET /allocations` | NgoAllocations, Relief (allocate modal) | `relief` | `workflows`, `exception-paths` (block) | ✅ |
 | FR-16 | Notify.Request, .Assignment, .ShelterCapacity, .Alert; CI-2 | In-app notifications (request/assignment/capacity/public alert) | notify on submit/verify/assign/progress/resolve/support/capacity/allocate; `POST /alerts/broadcast`; inbox endpoints | Bell (10s poll), Notifications, Alerts | `lifecycle` | `full-story`, `workflows` (broadcast) | ✅ |
-| FR-17 | Dashboard.Requests, Dashboard.Resources, Dashboard.Charts | Admin dashboard (counts, availability, occupancy, shortages, charts) | `GET /dashboard/summary`, `GET /dashboard/timeseries` | Dashboard (StatCards, Recharts, live Leaflet map) | `lifecycle` | `roles` (heading), screenshots | ✅ |
+| FR-17 | Dashboard.Requests, Dashboard.Resources, Dashboard.Charts | Admin dashboard (counts, availability, occupancy, shortages, charts) | `GET /dashboard/summary`, `GET /dashboard/timeseries` | Dashboard (StatCards, Recharts, live Leaflet map) | `lifecycle` (summary + timeseries assertions) | `batch5` (dashboard refresh after triage, charts render), screenshots (baseline) | ✅ |
 | FR-18 | SE-6 | Audit log on priority changes, assignments, allocations (+auth events) | `writeAuditLog` in every mutating service; `GET /audit-logs` | Audit viewer; RequestDetail history | `lifecycle`, `metaDisplay` | `full-story` (history) | ✅ |
 
 State machines enforced in exactly one place — `backend/src/utils/enums.ts`
@@ -53,7 +83,7 @@ service (unit-tested in `requestTransitions.test.ts`).
 | SE-4 | RBAC everywhere | `authenticate`+`authorize` per route; UI guards mirror | All specs | ✅ |
 | SE-5 | Victim contact/location privacy | `decorateRequest` masks phone+coords unless ADMIN/owner/assigned-team | `metaDisplay.test.ts`; `privacy.spec.ts` | ✅ |
 | SE-6 | Audit log (FR-18) | see above | see above | ✅ |
-| OE-1 | Chrome/Firefox/Edge + mobile browsers | Responsive Tailwind; tested Chromium + mobile viewport | 30 screenshots | ✅ (FF/Edge untested — §4) |
+| OE-1 | Chrome/Firefox/Edge + mobile browsers | Responsive Tailwind; tested Chromium + mobile viewport | 30 screenshots | ⚠️ Chromium only + mobile viewport — FF/Edge untested, see §4 |
 | OE-2 | Linux + Node runtime | Node 24 + Express; `npm run` scripts; no OS-specific code except `start-dev.bat` helper | `package.json` | ✅ |
 | OE-3 | Public internet access | CORS allowlist is env-configurable (`FRONTEND_URL`) | `.env.example` | ✅ |
 | CO-1 | Coding/documentation standard | AGENTS.md contract; uniform envelope/errors; Swagger | This repo | ✅ |
@@ -62,7 +92,7 @@ service (unit-tested in `requestTransitions.test.ts`).
 | CO-4 | Single backend language | TypeScript/Express only | `backend/` | ✅ |
 | UD-1 | In-app help section | Help page (role guides + helplines) linked from every sidebar | E2E nav | ✅ |
 | UD-2 | First-login guided walkthrough | ⚠️ **Gap:** role guides exist, but no first-login tour overlay | §4 | ⚠️ |
-| UI-1 | Consistent visual style | Design tokens + shared `ui.tsx` kit on all 25 pages | Screenshots | ✅ |
+| UI-1 | Consistent visual style | Design tokens + shared `ui.tsx` kit on all pages (30 distinct paths, 23 page files) | Screenshots | ✅ |
 | UI-2 | Context help link every screen | ⚠️ **Gap:** global Help page only; no per-screen help links | §4 | ⚠️ |
 | UI-3 | Request form ≤ 5 steps | 3-step wizard (type → location → details/confirm) | `full-story` | ✅ |
 | UI-4 | Keyboard-only operation | Focus-visible rings; native controls; drawer/modal Esc; axe keyboard checks | `a11y.spec.ts` | ✅ |
@@ -96,11 +126,13 @@ service (unit-tested in `requestTransitions.test.ts`).
 2. **TLS (SE-1/CI-1)** — dev runs HTTP; production must terminate TLS at reverse proxy (documented in README). HSTS comes free with Helmet once deployed.
 3. **UD-2 first-login tour** — role guides live on the Help page; no overlay tour. Low cost to add later (e.g. driver.js).
 4. **UI-2 per-screen help** — global Help link in every sidebar instead of per-screen links; acceptable interpretation, noted.
-5. **Request.Cancel wording** — SRS §3.1.3 says "only while Submitted" but Appendix B allows Submitted *or* Verified → Cancelled; code follows Appendix B + `REQUEST_TRANSITIONS` (documented choice).
+5. **Request.Cancel wording (accepted)** — SRS §3.1.3 says "only while Submitted" but Appendix B allows Submitted *or* Verified → Cancelled; code follows Appendix B + `REQUEST_TRANSITIONS` (documented choice, matches the activity diagram; source doc ambiguity accepted).
 6. **CO-2 engine** — SRS names MySQL/PostgreSQL; build uses SQLite file DB with portable ORM code (one-line provider swap). Accepted for academic scope.
 7. **Browsers** — E2E runs Chromium; Firefox/WebKit not in CI (Playwright projects ready to add).
 8. **Availability 99%** — single instance; no standby. Fine for Release 1.0 demo scope.
 9. **npm audit (B-02, Oct 2026)** — `npm audit fix` (no `--force`) leaves 7 vulnerabilities (1 moderate `esbuild<=0.24.2` GHSA-67mh-4wv8-2f99 via `vite`, 6 high `braces` GHSA-vfj7-8cjw-p6xm via `tailwindcss/chokidar`); non-breaking fix changes nothing. Breaking fixes (`tailwindcss@4`, `vite@8`) deferred to a separate branch — Tailwind v3 / Vite v5 majors kept. Accepted risk: both are dev-time-only (local dev server, build-time glob); no production runtime exposure in Release 1.0.
+10. **Request.Resolve admin path (accepted)** — SRS allows "authorized Rescue Team *or* Administrator" to resolve; the build resolves ONLY through the rescue-report flow (`submitReport → RESOLVED`, single writer, exactly-once 409). No `POST /requests/:id/resolve` exists by design: it would bypass the report that justifies RESOLVED. AGENTS.md §5 documents this; accepted deviation.
+11. **Team.History read surface (minor)** — `GET /teams/:id` embeds the latest 20 assignments but no UI page renders it (Teams board shows availability only) and no dedicated test asserts it. Read-only display data; covered indirectly by seed shape. No code change.
 
 ## 5. Accepted design decisions (audit S-03 / S-04 — intentional, no code change)
 

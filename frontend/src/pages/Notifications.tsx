@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, EmptyState, EnumBadge, ErrorState, Skeleton, formatApiError, useToast } from '../components/ui.tsx';
 import { useMeta } from '../lib/meta.tsx';
+import { STR } from '../lib/strings.ts';
 import { apiSend, apiSendOne } from '../lib/api-client.ts';
 import { useNotifications } from '../lib/queries.ts';
 
@@ -38,7 +39,7 @@ export default function Notifications() {
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">🔔 Notifications</h1>
-        <Button variant="secondary" size="sm" onClick={() => void markAll()}>Mark all read</Button>
+        <Button variant="secondary" size="sm" onClick={() => void markAll()}>{STR.markAllRead}</Button>
       </div>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by type">
         {['', ...options('notificationTypes').map((o) => o.value)].map((t) => (
@@ -50,7 +51,7 @@ export default function Notifications() {
       </div>
       {q.isLoading && <><Skeleton className="h-16" /><Skeleton className="h-16" /></>}
       {q.isError && <ErrorState message="Could not load notifications." onRetry={() => void q.refetch()} />}
-      {q.data && q.data.items.length === 0 && <EmptyState title="You're all caught up" hint="Request updates, assignments and public alerts will appear here." />}
+      {q.data && q.data.items.length === 0 && <EmptyState title={STR.emptyInboxTitle} hint={STR.emptyInboxHint} />}
       <Card>
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">
           {(q.data?.items ?? []).map((n) => (
@@ -63,7 +64,7 @@ export default function Notifications() {
                   {new Date(n.createdAt).toLocaleString()}
                 </p>
               </div>
-              {!n.isRead && <Button variant="ghost" size="sm" onClick={() => void markOne(n.id)}>Mark read</Button>}
+              {!n.isRead && <Button variant="ghost" size="sm" onClick={() => void markOne(n.id)}>{STR.markRead}</Button>}
             </li>
           ))}
         </ul>

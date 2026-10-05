@@ -61,13 +61,15 @@ test('unavailable team requires override reason, then force-assigns', async ({ p
   expect(alpha).toBeTruthy();
 
   // paste busy team id → Force → modal demands a reason
+  // (F-10: the triage drawer is role=dialog too — scope to the override modal)
   await adminPage.getByPlaceholder(/paste any team id/i).fill(alpha.id);
   await adminPage.getByRole('button', { name: /^force/i }).click();
-  await expect(adminPage.getByRole('dialog')).toBeVisible();
-  await adminPage.getByRole('button', { name: /override & assign/i }).click();
+  const overrideDialog = adminPage.getByRole('dialog', { name: /override availability/i });
+  await expect(overrideDialog).toBeVisible();
+  await overrideDialog.getByRole('button', { name: /override & assign/i }).click();
   await expect(adminPage.getByText(/at least 5 characters/i)).toBeVisible();
   await adminPage.getByLabel(/override reason/i).fill('Nearest boat crew despite engagement');
-  await adminPage.getByRole('button', { name: /override & assign/i }).click();
+  await overrideDialog.getByRole('button', { name: /override & assign/i }).click();
   await expect(adminPage.getByText(/force-assigned/i)).toBeVisible({ timeout: 20_000 });
   // repeat dispatch labelled as additional support
   await expect(adminPage.getByText(/additional support/i).first()).toBeVisible({ timeout: 20_000 });

@@ -35,7 +35,7 @@ describe('GET /api/meta', () => {
     const res = await request(app).get('/api/meta');
     expect(res.status).toBe(200);
     const meta = res.body.data;
-    for (const group of ['roles', 'publicRoles', 'requestStatuses', 'priorities', 'emergencyTypes', 'teamAvailability', 'assignmentStatuses', 'volunteerTaskStatuses', 'volunteerTaskTypes', 'shelterStatuses', 'resourceRequestStatuses', 'allocationStatuses', 'notificationTypes', 'disasterStatuses', 'severities', 'injurySeverities']) {
+    for (const group of ['roles', 'publicRoles', 'requestStatuses', 'priorities', 'emergencyTypes', 'teamAvailability', 'assignmentStatuses', 'volunteerTaskStatuses', 'volunteerTaskTypes', 'shelterStatuses', 'resourceRequestStatuses', 'allocationStatuses', 'notificationTypes', 'disasterStatuses', 'severities', 'injurySeverities', 'itemCategories', 'verifyDecisions']) {
       expect(Array.isArray(meta[group]), group).toBe(true);
       expect(meta[group].length).toBeGreaterThan(0);
       for (const opt of meta[group]) {

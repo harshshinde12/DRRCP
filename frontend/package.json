@@ -7,7 +7,8 @@
     "dev": "vite --port 5173",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint:meta": "node scripts/check-meta-usage.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

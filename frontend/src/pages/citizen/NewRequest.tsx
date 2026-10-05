@@ -21,8 +21,6 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
-const TYPE_ICONS: Record<string, string> = { RESCUE: '🛟', MEDICAL: '🏥', FOOD: '🍲', WATER: '💧', SHELTER: '🏠', FIRE: '🔥', MISSING_PERSON: '🧭', INFRASTRUCTURE: '🏗️' };
-
 export default function NewRequest() {
   const { options } = useMeta();
   const { push } = useToast();
@@ -89,7 +87,7 @@ export default function NewRequest() {
                 {options('emergencyTypes').map((t) => (
                   <label key={t.value} className={`flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 p-3 text-center transition has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50 dark:has-[:checked]:bg-brand-950 ${watch('emergencyType') === t.value ? '' : 'border-slate-200 dark:border-slate-700'}`}>
                     <input type="radio" value={t.value} {...register('emergencyType')} className="sr-only" />
-                    <span aria-hidden className="text-2xl">{TYPE_ICONS[t.value] ?? '🆘'}</span>
+                    <span aria-hidden className="text-2xl">{t.icon ?? '🆘'}</span>
                     <span className="text-xs font-semibold">{t.label}</span>
                   </label>
                 ))}

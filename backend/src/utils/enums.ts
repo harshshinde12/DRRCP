@@ -139,17 +139,26 @@ export type ColorKey =
   | 'slate' | 'gray' | 'red' | 'orange' | 'amber' | 'green'
   | 'blue' | 'indigo' | 'violet' | 'cyan' | 'pink' | 'lime';
 
-export type EnumOption = { value: string; label: string; color: ColorKey };
+export type EnumOption = { value: string; label: string; color: ColorKey; icon?: string };
 
-function opts(values: readonly string[], labels: Record<string, string>, colors: Record<string, ColorKey>, fallback: ColorKey = 'slate'): EnumOption[] {
+function opts(values: readonly string[], labels: Record<string, string>, colors: Record<string, ColorKey>, fallback: ColorKey = 'slate', icons?: Record<string, string>): EnumOption[] {
   return values.map((value) => ({
     value,
     label: labels[value] ?? value,
     color: colors[value] ?? fallback,
+    ...(icons?.[value] ? { icon: icons[value] } : {}),
   }));
 }
 
 export const PUBLIC_ROLES: Role[] = ['CITIZEN', 'VOLUNTEER', 'SHELTER_MANAGER', 'NGO'];
+
+/** Relief catalogue categories (single source for itemSchema + /api/meta). */
+export const ITEM_CATEGORIES = ['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT'] as const;
+export type ItemCategory = (typeof ITEM_CATEGORIES)[number];
+
+/** Admin triage decisions (single source for verifyRequestSchema + /api/meta). */
+export const VERIFY_DECISIONS = ['VERIFIED', 'DUPLICATE', 'REJECTED'] as const;
+export type VerifyDecision = (typeof VERIFY_DECISIONS)[number];
 
 export const META = {
   roles: opts(ROLES, {
@@ -170,7 +179,11 @@ export const META = {
   emergencyTypes: opts(EMERGENCY_TYPES, {
     RESCUE: 'Rescue', MEDICAL: 'Medical', FOOD: 'Food', WATER: 'Water',
     SHELTER: 'Shelter', FIRE: 'Fire', MISSING_PERSON: 'Missing person', INFRASTRUCTURE: 'Infrastructure',
-  }, { RESCUE: 'red', MEDICAL: 'pink', FOOD: 'amber', WATER: 'cyan', SHELTER: 'violet', FIRE: 'orange', MISSING_PERSON: 'indigo', INFRASTRUCTURE: 'slate' }),
+  }, { RESCUE: 'red', MEDICAL: 'pink', FOOD: 'amber', WATER: 'cyan', SHELTER: 'violet', FIRE: 'orange', MISSING_PERSON: 'indigo', INFRASTRUCTURE: 'slate' },
+  'slate', {
+    RESCUE: '🛟', MEDICAL: '🏥', FOOD: '🍲', WATER: '💧',
+    SHELTER: '🏠', FIRE: '🔥', MISSING_PERSON: '🧭', INFRASTRUCTURE: '🏗️',
+  }),
   teamAvailability: opts(TEAM_AVAILABILITY, {
     AVAILABLE: 'Available', ASSIGNED: 'Assigned', ON_THE_WAY: 'On the way', RESCUE_IN_PROGRESS: 'Rescue in progress',
   }, { AVAILABLE: 'green', ASSIGNED: 'violet', ON_THE_WAY: 'blue', RESCUE_IN_PROGRESS: 'amber' }),
@@ -210,6 +223,13 @@ export const META = {
   injurySeverities: opts(['NONE', 'MINOR', 'MODERATE', 'SEVERE', 'UNKNOWN'] as const, {
     NONE: 'None', MINOR: 'Minor', MODERATE: 'Moderate', SEVERE: 'Severe', UNKNOWN: 'Unknown',
   }, { NONE: 'green', MINOR: 'amber', MODERATE: 'orange', SEVERE: 'red', UNKNOWN: 'slate' }),
+  itemCategories: opts(ITEM_CATEGORIES, {
+    FOOD: 'Food', WATER: 'Water', MEDICINE: 'Medicine',
+    CLOTHING: 'Clothing', HYGIENE: 'Hygiene', EQUIPMENT: 'Equipment',
+  }, { FOOD: 'amber', WATER: 'cyan', MEDICINE: 'pink', CLOTHING: 'violet', HYGIENE: 'lime', EQUIPMENT: 'slate' }),
+  verifyDecisions: opts(VERIFY_DECISIONS, {
+    VERIFIED: 'Verified', DUPLICATE: 'Duplicate', REJECTED: 'Rejected',
+  }, { VERIFIED: 'indigo', DUPLICATE: 'gray', REJECTED: 'red' }),
   // Canonical step orders for timelines (no new states — presentation only).
   requestLifecycle: ['SUBMITTED', 'VERIFIED', 'ASSIGNED', 'RESCUE_IN_PROGRESS', 'RESOLVED'] as RequestStatus[],
   assignmentLifecycle: ['ASSIGNED', 'ACKNOWLEDGED', 'ON_THE_WAY', 'RESCUE_IN_PROGRESS', 'COMPLETED'] as AssignmentStatus[],

@@ -7,13 +7,14 @@ export type ColorKey =
   | 'slate' | 'gray' | 'red' | 'orange' | 'amber' | 'green'
   | 'blue' | 'indigo' | 'violet' | 'cyan' | 'pink' | 'lime';
 
-export interface EnumOption { value: string; label: string; color: ColorKey; }
+export interface EnumOption { value: string; label: string; color: ColorKey; icon?: string; }
 
 export type MetaGroup =
   | 'roles' | 'publicRoles' | 'requestStatuses' | 'priorities' | 'emergencyTypes'
   | 'teamAvailability' | 'assignmentStatuses' | 'volunteerTaskStatuses' | 'volunteerTaskTypes'
   | 'shelterStatuses' | 'resourceRequestStatuses' | 'allocationStatuses'
-  | 'notificationTypes' | 'disasterStatuses' | 'severities' | 'injurySeverities';
+  | 'notificationTypes' | 'disasterStatuses' | 'severities' | 'injurySeverities'
+  | 'itemCategories' | 'verifyDecisions';
 
 export interface AppMeta extends Record<string, EnumOption[] | string[]> {
   roles: EnumOption[]; publicRoles: EnumOption[];
@@ -22,6 +23,7 @@ export interface AppMeta extends Record<string, EnumOption[] | string[]> {
   volunteerTaskStatuses: EnumOption[]; volunteerTaskTypes: EnumOption[];
   shelterStatuses: EnumOption[]; resourceRequestStatuses: EnumOption[]; allocationStatuses: EnumOption[];
   notificationTypes: EnumOption[]; disasterStatuses: EnumOption[]; severities: EnumOption[]; injurySeverities: EnumOption[];
+  itemCategories: EnumOption[]; verifyDecisions: EnumOption[];
   requestLifecycle: string[]; assignmentLifecycle: string[];
 }
 

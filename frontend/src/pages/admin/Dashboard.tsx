@@ -3,19 +3,23 @@ import { Link } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RequestsMap } from '../../components/Maps.tsx';
 import { Card, CardTitle, CardSkeleton, EnumBadge, ErrorState, Skeleton, StatCard } from '../../components/ui.tsx';
-import { PRIORITY_DOT, useMeta } from '../../lib/meta.tsx';
+import { useMeta } from '../../lib/meta.tsx';
+import { STR } from '../../lib/strings.ts';
 import { useDashboard, useRequests, useShortages, useTimeseries } from '../../lib/queries.ts';
 
 export default function AdminDashboard() {
-  const { label } = useMeta();
+  const { label, dotColor, meta } = useMeta();
   const dash = useDashboard();
   const ts = useTimeseries(14);
   const shortages = useShortages();
   const mapReqs = useRequests({ limit: 100 });
 
   const byStatus = useMemo(() => Object.entries(dash.data?.requests.byStatus ?? {}).map(([k, v]) => ({ name: label('requestStatuses', k), value: v })), [dash.data, label]);
-  const byPriority = useMemo(() => Object.entries(dash.data?.requests.byPriority ?? {}).map(([k, v]) => ({ name: label('priorities', k), value: v, fill: PRIORITY_DOT[k] ?? '#64748b' })), [dash.data, label]);
+  const byPriority = useMemo(() => Object.entries(dash.data?.requests.byPriority ?? {}).map(([k, v]) => ({ name: label('priorities', k), value: v, fill: dotColor('priorities', k) })), [dash.data, dotColor, label]);
   const byType = useMemo(() => Object.entries(dash.data?.requests.byType ?? {}).map(([k, v]) => ({ name: label('emergencyTypes', k), value: v })), [dash.data, label]);
+  // F-07: live = lifecycle steps before RESOLVED (canonical order ends with RESOLVED) — same set as before, from meta.
+  const liveStatuses = (meta?.requestLifecycle ?? []).slice(0, -1);
+  const liveReqs = (mapReqs.data?.items ?? []).filter((r) => liveStatuses.length === 0 || liveStatuses.includes(r.status));
 
   if (dash.isLoading) return <><CardSkeleton /><CardSkeleton /></>;
   if (dash.isError || !dash.data) return <ErrorState message="Could not load the operational picture." onRetry={() => void dash.refetch()} />;
@@ -40,7 +44,7 @@ export default function AdminDashboard() {
         {mapReqs.isLoading && <Skeleton className="h-64" />}
         {mapReqs.isError && <ErrorState message="Could not load the incident map." onRetry={() => void mapReqs.refetch()} />}
         {!mapReqs.isLoading && !mapReqs.isError && (
-          <RequestsMap requests={(mapReqs.data?.items ?? []).filter((r) => !['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'].includes(r.status))} />
+          <RequestsMap requests={liveReqs} />
         )}
       </Card>
 
@@ -128,7 +132,7 @@ function RequestQueuePreview() {
   if (q.isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
   if (q.isError) return <ErrorState message="Could not load the queue preview." onRetry={() => void q.refetch()} />;
   const items = q.data?.items ?? [];
-  if (items.length === 0) return <p className="text-sm text-slate-500">Queue clear — nothing awaiting verification. 🎉</p>;
+  if (items.length === 0) return <p className="text-sm text-slate-500">{STR.queueClear} — {STR.queueClearHint}</p>;
   return (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
       {items.map((r) => (

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EMERGENCY_TYPES, PRIORITIES, REQUEST_STATUSES } from '../utils/enums.js';
+import { EMERGENCY_TYPES, PRIORITIES, REQUEST_STATUSES, VERIFY_DECISIONS } from '../utils/enums.js';
 import { strictBoolean } from './common.schema.js';
 
 export const createRequestSchema = z.object({
@@ -27,7 +27,7 @@ export const listRequestsQuery = z.object({
 });
 
 export const verifyRequestSchema = z.object({
-  decision: z.enum(['VERIFIED', 'DUPLICATE', 'REJECTED']),
+  decision: z.enum(VERIFY_DECISIONS),
   priority: z.enum(PRIORITIES).default('MEDIUM'),
   duplicateOfId: z.string().min(1).optional(),
 });

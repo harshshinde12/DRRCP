@@ -1,11 +1,13 @@
 import { useMeta } from '../lib/meta.tsx';
+import { STR } from '../lib/strings.ts';
 import { Badge, EnumBadge } from './ui.tsx';
 
 /** Citizen timeline: canonical request steps from meta + live mission readout. */
 export function StatusTimeline({ status, missionStatus, displayStatus }: { status: string; missionStatus: string | null; displayStatus: string }) {
   const { meta, label } = useMeta();
   const steps = meta?.requestLifecycle ?? ['SUBMITTED', 'VERIFIED', 'ASSIGNED', 'RESCUE_IN_PROGRESS', 'RESOLVED'];
-  const terminal = ['REJECTED', 'DUPLICATE', 'CANCELLED'].includes(status);
+  // F-07: terminal = off-lifecycle (REJECTED/DUPLICATE/CANCELLED) — derived, same set.
+  const terminal = !steps.includes(status);
   const activeIdx = steps.indexOf(status);
 
   return (
@@ -34,7 +36,7 @@ export function StatusTimeline({ status, missionStatus, displayStatus }: { statu
                 </span>
                 <div className="pt-0.5">
                   <p className={`text-sm font-semibold ${current ? 'text-brand-700 dark:text-brand-300' : 'text-slate-700 dark:text-slate-300'}`}>{label('requestStatuses', step)}</p>
-                  {current && missionStatus && ['ASSIGNED'].includes(status) && (
+                  {current && missionStatus && status === 'ASSIGNED' && (
                     <p className="text-xs text-slate-500">Mission: {label('assignmentStatuses', missionStatus)}</p>
                   )}
                 </div>
@@ -53,7 +55,7 @@ export function AssignmentChip({ assignment, additional }: { assignment: { statu
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">
       <Badge className={badgeClass('assignmentStatuses', assignment.status)}>
-        {additional ? 'Additional support · ' : ''}{assignment.team.name} — {label('assignmentStatuses', assignment.status)}
+        {additional ? `${STR.supportAdditional} · ` : ''}{assignment.team.name} — {label('assignmentStatuses', assignment.status)}
       </Badge>
     </span>
   );

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, EmptyState, EnumBadge, ErrorState, Skeleton, formatApiError, useToast } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
+import { STR } from '../../lib/strings.ts';
 import { useRequestAction, useRequests } from '../../lib/queries.ts';
 
 function Filters({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -30,10 +31,10 @@ export default function MyRequests() {
   const action = useRequestAction();
 
   async function cancel(id: string) {
-    if (!confirm('Cancel this request? This cannot be undone.')) return;
+    if (!confirm(STR.cancelConfirm)) return;
     try {
       await action.mutateAsync({ id, kind: 'cancel' });
-      push('success', 'Request cancelled.');
+      push('success', STR.requestCancelled);
     } catch (err) {
       push('error', formatApiError(err));
     }
@@ -63,12 +64,12 @@ export default function MyRequests() {
             </div>
             <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{r.displayStatus}</div>
             {(r.assignments ?? []).length > 1 && (
-              <p className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-300">＋ Additional support dispatched ({r.assignments.length} teams)</p>
+              <p className="mt-1 text-xs font-semibold text-violet-600 dark:text-violet-300">· {STR.supportAdditional} dispatched ({r.assignments.length} teams)</p>
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Link to={`/my-requests/${r.id}`}><Button variant="secondary" size="sm">Track →</Button></Link>
               {['SUBMITTED', 'VERIFIED'].includes(r.status) && (
-                <Button variant="danger" size="sm" disabled={action.isPending} onClick={() => void cancel(r.id)}>Cancel</Button>
+                <Button variant="danger" size="sm" disabled={action.isPending} onClick={() => void cancel(r.id)}>{STR.cancelRequest}</Button>
               )}
             </div>
           </Card>

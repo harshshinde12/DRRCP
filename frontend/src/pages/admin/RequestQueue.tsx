@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusTimeline } from '../../components/StatusBits.tsx';
-import { Badge, Button, Card, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, Textarea, formatApiError, useToast, type Column } from '../../components/ui.tsx';
+import { Badge, Button, Card, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, Textarea, formatApiError, useDialogFocus, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
+import { STR } from '../../lib/strings.ts';
 import { useAssignTeam, useMatchingTeams, useRequest, useRequestAction, useRequests } from '../../lib/queries.ts';
 import type { EmergencyRequest } from '../../lib/types.ts';
 
@@ -80,11 +81,14 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
   }
 
   const hasAssignments = (r?.assignments?.length ?? 0) > 0;
+  // F-10: non-modal drawer — role=dialog + Esc + initial/return focus (no trap; page stays usable).
+  const panelRef = useDialogFocus(requestId != null, onClose, { trap: false });
 
   return (
     <>
-      <div className={`fixed inset-0 z-40 bg-slate-950/50 transition ${requestId ? '' : 'pointer-events-none opacity-0'}`} onClick={onClose} aria-hidden />
-      <aside aria-label="Triage panel" className={`fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl transition-transform dark:border-slate-800 dark:bg-slate-900 ${requestId ? 'translate-x-0' : 'translate-x-full'}`}>
+      <button aria-label="Close triage panel" onClick={onClose} tabIndex={requestId ? undefined : -1}
+        className={`fixed inset-0 z-40 bg-slate-950/50 transition ${requestId ? '' : 'pointer-events-none opacity-0'}`} />
+      <aside ref={panelRef} tabIndex={-1} role="dialog" aria-label="Triage panel" className={`fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-xl outline-none transition-transform dark:border-slate-800 dark:bg-slate-900 ${requestId ? 'translate-x-0' : 'translate-x-full'}`}>
         <div className="flex items-center justify-between border-b border-slate-200 p-4 dark:border-slate-800">
           <h2 className="font-extrabold text-slate-900 dark:text-white">Triage</h2>
           <button onClick={onClose} aria-label="Close triage panel" className="rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -106,7 +110,7 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
                 <section aria-label="Verify" className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                   <h3 className="text-sm font-bold">1 · Verify</h3>
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <Field label="Decision"><Select value={verify.decision} onChange={(e) => setVerify({ ...verify, decision: e.target.value })}>{['VERIFIED', 'DUPLICATE', 'REJECTED'].map((d) => <option key={d} value={d}>{d}</option>)}</Select></Field>
+                    <Field label="Decision"><Select value={verify.decision} onChange={(e) => setVerify({ ...verify, decision: e.target.value })}>{options('verifyDecisions').map((d) => <option key={d.value} value={d.value}>{d.value}</option>)}</Select></Field>
                     <Field label="Priority"><Select value={verify.priority} onChange={(e) => setVerify({ ...verify, priority: e.target.value })}>{options('priorities').map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select></Field>
                   </div>
                   {verify.decision === 'DUPLICATE' && (
@@ -218,7 +222,7 @@ export default function RequestQueue() {
           meta={q.data.meta}
           page={page}
           onPage={setPage}
-          emptyTitle="Queue is clear 🎉"
+          emptyTitle={STR.queueClear}
           onRowClick={(row) => { setFocus(row.id); setParams((p) => { p.set('focus', row.id); return p; }, { replace: true }); }}
         />
       )}

@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { ALLOCATION_STATUSES, PRIORITIES, RESOURCE_REQUEST_STATUSES } from '../utils/enums.js';
+import { ALLOCATION_STATUSES, ITEM_CATEGORIES, PRIORITIES, RESOURCE_REQUEST_STATUSES } from '../utils/enums.js';
 import { strictBoolean } from './common.schema.js';
 
 export const createItemSchema = z.object({
   itemName: z.string().min(2).max(200),
-  category: z.enum(['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT']),
+  category: z.enum(ITEM_CATEGORIES),
   unit: z.string().min(1).max(30),
 });
 

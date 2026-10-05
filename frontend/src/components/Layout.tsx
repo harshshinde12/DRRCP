@@ -2,8 +2,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, homeForRole } from '../lib/auth.tsx';
 import { useUnreadCount } from '../lib/queries.ts';
+import { HELPLINES } from '../lib/strings.ts';
 import type { Role } from '../lib/types.ts';
-import { Button } from './ui.tsx';
+import { Button, HelpLink } from './ui.tsx';
 
 /* ---------- Theme ---------- */
 export function useTheme() {
@@ -141,10 +142,13 @@ export function AppShell() {
           <button onClick={toggle} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
             <span aria-hidden className="text-xl">{dark ? '☀️' : '🌙'}</span>
           </button>
+          <HelpLink />
           <Bell />
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 p-3 sm:p-5"><Outlet /></main>
-        <footer className="px-4 py-3 text-center text-xs text-slate-400">DRRCP · Disaster Relief & Rescue Coordination Platform ·Release 1.0 · Emergency: <a className="link font-bold" href="tel:112">112</a></footer>
+        <footer className="px-4 py-3 text-center text-xs text-slate-400">DRRCP · Disaster Relief & Rescue Coordination Platform · Release 1.0 · {HELPLINES.map((h, i) => (
+          <span key={h.n}>{i === 0 ? 'Emergency helplines: ' : ' · '}<a className="link font-bold" href={`tel:${h.n}`}>{h.n}</a></span>
+        ))}</footer>
       </div>
     </div>
   );
@@ -163,13 +167,16 @@ export function PublicLayout() {
           </Link>
           <div className="flex-1" />
           <button onClick={toggle} aria-label="Toggle dark mode" className="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800">{dark ? '☀️' : '🌙'}</button>
+          <HelpLink />
           <Link to="/login" className="rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Log in</Link>
           <Link to="/register" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-brand-700">Register</Link>
         </div>
       </header>
       <main><Outlet /></main>
       <footer className="border-t border-slate-200 px-4 py-4 text-center text-xs text-slate-600 dark:border-slate-800 dark:text-slate-400">
-        DRRCP Release 1.0 · In-app notifications only · Emergency helplines: <a className="link" href="tel:112">112</a> · <a className="link" href="tel:1078">1078</a> (Disaster) · <a className="link" href="tel:102">102</a> (Medical)
+        DRRCP Release 1.0 · In-app notifications only · Emergency helplines: {HELPLINES.map((h, i) => (
+          <span key={h.n}>{i > 0 && ' · '}<a className="link" href={`tel:${h.n}`}>{h.n}</a> ({h.d})</span>
+        ))}
       </footer>
     </div>
   );

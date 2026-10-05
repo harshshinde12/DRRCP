@@ -1,4 +1,6 @@
-import { Children, cloneElement, createContext, forwardRef, isValidElement, useCallback, useContext, useEffect, useId, useState, type ReactNode } from 'react';
+import { Children, cloneElement, createContext, forwardRef, isValidElement, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../lib/auth.tsx';
 import { useMeta } from '../lib/meta.tsx';
 import type { MetaGroup, PageMeta } from '../lib/types.ts';
 
@@ -141,18 +143,53 @@ export function StatCard({ label, value, sub, icon, accent = 'text-brand-600' }:
 }
 
 /* ---------- Modal ---------- */
-export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
+/**
+ * F-10: dialog focus management. Initial focus goes to the first control
+ * (else the container); focus returns to the trigger on close. `trap`
+ * keeps Tab cycling inside true modals; drawers pass trap:false (non-modal)
+ * and only get Esc + initial/return focus.
+ */
+export function useDialogFocus(open: boolean, onClose: () => void, opts?: { trap?: boolean; esc?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prev = useRef<HTMLElement | null>(null);
+  // Latest close handler without re-running the effect (parents pass inline arrows).
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const { trap = false, esc = true } = opts ?? {};
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    prev.current = document.activeElement as HTMLElement | null;
+    const node = ref.current;
+    const focusables = () =>
+      [...(node?.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])') ?? [])]
+        .filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
+    (focusables()[0] ?? node)?.focus?.();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && esc) { closeRef.current(); return; }
+      if (e.key !== 'Tab' || !trap || !node) return;
+      const items = focusables();
+      if (items.length === 0) { e.preventDefault(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      prev.current?.focus?.();
+    };
+  }, [open, trap, esc]);
+  return ref;
+}
+
+export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
+  const ref = useDialogFocus(open, onClose, { trap: true });
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
       <button aria-label="Close dialog" className="absolute inset-0 bg-slate-950/60" onClick={onClose} />
-      <div className={`relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl dark:bg-slate-900 sm:rounded-2xl ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'}`}>
+      <div ref={ref} tabIndex={-1} className={`relative max-h-[92vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 shadow-xl outline-none dark:bg-slate-900 sm:rounded-2xl ${wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'}`}>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
@@ -268,6 +305,27 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast() {
   return useContext(ToastCtx);
+}
+
+/**
+ * U-05: per-screen help link. Role-aware: points at the matching Help page
+ * section (logged-out users land on the full guide list). Rendered in the
+ * app + public headers, so every screen carries one.
+ */
+const HELP_SECTION: Record<string, string> = {
+  CITIZEN: 'help-citizen', ADMIN: 'help-admin', RESCUE_TEAM: 'help-team',
+  VOLUNTEER: 'help-volunteer', SHELTER_MANAGER: 'help-shelter', NGO: 'help-ngo',
+};
+export function HelpLink() {
+  const { user } = useAuth();
+  const section = user ? (HELP_SECTION[user.role] ?? '') : '';
+  const to = section ? `/help#${section}` : '/help';
+  return (
+    <Link to={to} aria-label="Open help for this screen"
+      className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">
+      <span aria-hidden className="text-xl">❓</span>
+    </Link>
+  );
 }
 
 export function formatApiError(err: unknown): string {

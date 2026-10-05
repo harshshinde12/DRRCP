@@ -5,6 +5,7 @@ import { writeAuditLog } from '../utils/audit.js';
 import {
   assertRequestTransition,
   deriveDisplayStatus,
+  VERIFY_DECISIONS,
   type AssignmentStatus,
   type Priority,
   type RequestStatus,
@@ -254,7 +255,7 @@ export async function cancelRequest(citizenId: string, id: string) {
 
 /** Admin triage: VERIFIED (+priority) | DUPLICATE (link required) | REJECTED. */
 export async function verifyRequest(adminId: string, id: string, decision: RequestStatus, priority: Priority, duplicateOfId?: string) {
-  if (!['VERIFIED', 'DUPLICATE', 'REJECTED'].includes(decision)) {
+  if (!(VERIFY_DECISIONS as readonly string[]).includes(decision)) {
     throw new HttpError(422, 'Decision must be VERIFIED, DUPLICATE or REJECTED');
   }
   if (decision === 'DUPLICATE') {

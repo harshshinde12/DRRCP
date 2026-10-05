@@ -19,8 +19,12 @@ const COLOR_CLASSES: Record<ColorKey, string> = {
   lime: 'bg-lime-100 text-lime-700 ring-lime-300 dark:bg-lime-950 dark:text-lime-300 dark:ring-lime-800',
 };
 
-/** Marker fill colors for Leaflet (hex, by priority). */
-export const PRIORITY_DOT: Record<string, string> = { CRITICAL: '#dc2626', HIGH: '#ea580c', MEDIUM: '#d97706', LOW: '#16a34a' };
+/** F-07: single hex per meta color key — dotColor() resolves value → color key → hex. */
+const COLOR_HEX: Record<ColorKey, string> = {
+  slate: '#64748b', gray: '#6b7280', red: '#dc2626', orange: '#ea580c',
+  amber: '#d97706', green: '#16a34a', blue: '#1c5ff5', indigo: '#4f46e5',
+  violet: '#7c3aed', cyan: '#0891b2', pink: '#db2777', lime: '#65a30d',
+};
 
 interface MetaCtx {
   meta: AppMeta | undefined;
@@ -30,6 +34,8 @@ interface MetaCtx {
   option: (group: MetaGroup, value: string | null | undefined) => EnumOption;
   label: (group: MetaGroup, value: string | null | undefined) => string;
   badgeClass: (group: MetaGroup, value: string | null | undefined) => string;
+  /** F-07: marker fill hex derived from the meta color key (no per-value hex map). */
+  dotColor: (group: MetaGroup, value: string | null | undefined) => string;
 }
 
 const Ctx = createContext<MetaCtx | null>(null);
@@ -54,6 +60,7 @@ export function MetaProvider({ children }: { children: ReactNode }) {
       option,
       label: (g, v) => option(g, v).label,
       badgeClass: (g, v) => COLOR_CLASSES[option(g, v).color] ?? COLOR_CLASSES.slate,
+      dotColor: (g, v) => COLOR_HEX[option(g, v).color] ?? COLOR_HEX.slate,
     };
   }, [data, isLoading, isError]);
 
@@ -68,4 +75,9 @@ export function useMeta(): MetaCtx {
 
 export function colorClasses(color: ColorKey): string {
   return COLOR_CLASSES[color] ?? COLOR_CLASSES.slate;
+}
+
+/** F-07: raw palette access by color KEY (for markers with no status value to resolve). */
+export function hexFor(color: ColorKey): string {
+  return COLOR_HEX[color] ?? COLOR_HEX.slate;
 }

@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { AssignmentChip, StatusTimeline } from '../../components/StatusBits.tsx';
 import { Button, Card, CardTitle, EmptyState, EnumBadge, ErrorState, Skeleton, formatApiError, useToast } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
+import { STR } from '../../lib/strings.ts';
 import { useRequest, useRequestAction, useRequestHistory } from '../../lib/queries.ts';
 
 /** F-05: audit metadata carries duplicate-link / override / dispatch context — render it instead of dropping it. */
@@ -39,10 +40,10 @@ export default function RequestDetail() {
   const r = q.data;
 
   async function cancel() {
-    if (!id || !confirm('Cancel this request? This cannot be undone.')) return;
+    if (!id || !confirm(STR.cancelConfirm)) return;
     try {
       await action.mutateAsync({ id, kind: 'cancel' });
-      push('success', 'Request cancelled.');
+      push('success', STR.requestCancelled);
     } catch (err) {
       push('error', formatApiError(err));
     }
@@ -69,7 +70,7 @@ export default function RequestDetail() {
           {r.disaster && <span>🌊 {r.disaster.name}</span>}
         </div>
         {['SUBMITTED', 'VERIFIED'].includes(r.status) && (
-          <div className="mt-3"><Button variant="danger" size="sm" disabled={action.isPending} onClick={() => void cancel()}>Cancel request</Button></div>
+          <div className="mt-3"><Button variant="danger" size="sm" disabled={action.isPending} onClick={() => void cancel()}>{STR.cancelRequest}</Button></div>
         )}
       </Card>
 
