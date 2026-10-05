@@ -253,11 +253,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={{ push }}>
       {children}
-      <div aria-live="polite" className="fixed bottom-4 right-4 z-[60] flex w-80 flex-col gap-2">
+      <div aria-live="polite" className="fixed bottom-4 right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
         {toasts.map((t) => (
           <div key={t.id} className={`card flex items-start gap-2 border-l-4 p-3 text-sm ${t.kind === 'success' ? 'border-l-green-500' : t.kind === 'error' ? 'border-l-red-500' : 'border-l-brand-500'}`}>
             <span aria-hidden>{t.kind === 'success' ? '✅' : t.kind === 'error' ? '⛔' : 'ℹ️'}</span>
-            <p className="flex-1">{t.message}</p>
+            <p className="flex-1 break-words">{t.message}</p>
             <button aria-label="Dismiss" onClick={() => setToasts((x) => x.filter((y) => y.id !== t.id))} className="text-slate-400 hover:text-slate-600">✕</button>
           </div>
         ))}

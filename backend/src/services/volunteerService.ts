@@ -54,9 +54,22 @@ export async function updateVolunteer(actorId: string, actorRole: string, id: st
  * Rank volunteers for a task: skill overlap first, then availability weight,
  * then service-area token overlap with the task location. (Volunteers carry
  * no GPS coords in R1 — ranking is skill + textual area match, documented.)
+ * BE-12: skill prefilter + bounded filler run in the DB; JS ranks the capped
+ * set instead of the whole volunteer table.
  */
 export async function suggestVolunteers(taskType: string, location: string, limit: number) {
-  const volunteers = await prisma.user.findMany({ where: { role: 'VOLUNTEER', isActive: true }, select: { ...VOLUNTEER_PUBLIC } });
+  const CAP = 200;
+  const base = { role: 'VOLUNTEER', isActive: true } as const;
+  const [matched, filler] = await Promise.all([
+    prisma.user.findMany({ where: { ...base, skills: { contains: taskType } }, select: { ...VOLUNTEER_PUBLIC }, take: CAP }),
+    // NULL skills fail the contains comparison either way — include them explicitly.
+    prisma.user.findMany({
+      where: { ...base, OR: [{ skills: null }, { NOT: { skills: { contains: taskType } } }] },
+      select: { ...VOLUNTEER_PUBLIC },
+      take: CAP,
+    }),
+  ]);
+  const volunteers = [...matched, ...filler];
   const locTokens = new Set(location.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean));
   const availabilityWeight = (a?: string | null) =>
     a === 'FULL_TIME' ? 5 : a === 'WEEKDAYS' || a === 'WEEKENDS' ? 2 : 0;

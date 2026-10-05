@@ -44,6 +44,8 @@ export default function Profile() {
       push('success', 'Profile saved.');
       setSaved(true);
       void qc.invalidateQueries({ queryKey: ['me'] });
+      void qc.invalidateQueries({ queryKey: ['users'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
 

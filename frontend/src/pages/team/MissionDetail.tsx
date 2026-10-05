@@ -28,7 +28,7 @@ export default function MissionDetail() {
   const { label } = useMeta();
   const q = useAssignment(id);
   const act = useMissionAction();
-  const reqDetail = useRequest(q.data?.requestId, false);
+  const reqDetail = useRequest(q.data?.requestId);
   const [supportOpen, setSupportOpen] = useState(false);
   const [supportNotes, setSupportNotes] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);

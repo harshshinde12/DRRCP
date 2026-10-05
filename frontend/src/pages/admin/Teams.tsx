@@ -39,7 +39,8 @@ function TeamForm({ onDone }: { onDone: () => void }) {
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<TeamInput>({ resolver: zodResolver(teamSchema) });
   const mut = useMutation({
     mutationFn: (body: TeamInput) => apiSendOne<RescueTeamLite>('post', '/teams', 'team', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }),
+    // F-08: registration moves the board, dashboard and audit.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['teams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
   async function onSubmit(data: TeamInput) {
     setServerError(null);

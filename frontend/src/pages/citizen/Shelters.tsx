@@ -8,9 +8,9 @@ function ShelterRow({ s }: { s: { id: string; name: string; location: string; to
   return (
     <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="font-bold text-slate-900 dark:text-white">{s.name}</p>
-          <p className="text-sm text-slate-500">📍 {s.location}{s.distanceKm != null && ` · ${s.distanceKm.toFixed(1)} km away`}</p>
+        <div className="min-w-0">
+          <p className="truncate font-bold text-slate-900 dark:text-white">{s.name}</p>
+          <p className="truncate text-sm text-slate-500">📍 {s.location}{s.distanceKm != null && ` · ${s.distanceKm.toFixed(1)} km away`}</p>
         </div>
         <EnumBadge group="shelterStatuses" value={s.operatingStatus} />
       </div>
@@ -20,7 +20,7 @@ function ShelterRow({ s }: { s: { id: string; name: string; location: string; to
           <div className={`h-full rounded-full ${pct >= 95 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
       </div>
-      <p className="mt-1.5 text-xs text-slate-500">Facilities: {s.facilities.split(',').join(' · ')}</p>
+      <p className="mt-1.5 truncate text-xs text-slate-500">Facilities: {s.facilities.split(',').join(' · ')}</p>
     </div>
   );
 }
@@ -44,6 +44,7 @@ export default function Shelters() {
   const list = pos ? (nearby.data ?? []) : (all.data?.items ?? []);
   const loading = pos ? nearby.isLoading : all.isLoading;
   const error = pos ? nearby.isError : all.isError;
+  const retry = () => { void nearby.refetch(); void all.refetch(); };
 
   return (
     <div className="space-y-4">
@@ -52,7 +53,7 @@ export default function Shelters() {
         <Button variant="secondary" onClick={locate}>📍 {pos ? 'Refresh location' : 'Use my location'}</Button>
       </div>
       {geoError && <p role="alert" className="text-sm text-red-600">{geoError}</p>}
-      {loading ? <Skeleton className="h-80" /> : error ? <ErrorState message="Could not load shelters." /> : (
+      {loading ? <Skeleton className="h-80" /> : error ? <ErrorState message="Could not load shelters." onRetry={retry} /> : (
         <SheltersMap shelters={list} userPos={pos} />
       )}
       {loading ? <Skeleton className="h-24" /> : list.length === 0 ? (

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, Textarea, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, Textarea, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
 import { apiSend, apiSendOne } from '../../lib/api-client.ts';
 import { useAuditLogs, useDisasters, useUsers } from '../../lib/queries.ts';
@@ -15,6 +15,7 @@ const alertSchema = z.object({ message: z.string().min(5, 'At least 5 characters
 export function BroadcastCard() {
   const { push } = useToast();
   const { options } = useMeta();
+  const qc = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof alertSchema>>({
@@ -31,6 +32,10 @@ export function BroadcastCard() {
       await apiSend('post', '/alerts/broadcast', { message: data.message, type: data.type ?? 'PUBLIC_ALERT', ...(roles ? { roles } : {}) });
       push('success', roles ? `Alert published to ${roles.join(', ')}.` : 'Alert published to all users.');
       reset(); setRoleFilter([]);
+      // F-08: broadcast lands in inboxes (incl. our own) and the audit trail.
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['unread-count'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
   return (
@@ -125,6 +130,7 @@ export function Users() {
       push('success', `${data.email} provisioned as ${data.role}.`);
       reset(); setShow(false);
       void qc.invalidateQueries({ queryKey: ['users'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
 
@@ -143,6 +149,7 @@ export function Users() {
           <Input placeholder="Search name / email…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="min-w-40 flex-1" aria-label="Search users" />
         </div>
       </Card>
+      {q.isLoading && <Skeleton className="h-32" />}
       {q.isError && <ErrorState message="Could not load users." onRetry={() => void q.refetch()} />}
       {q.data && <DataTable rows={q.data.items} columns={userCols} meta={q.data.meta} page={page} onPage={setPage} emptyTitle="No users found" />}
       <Modal open={show} onClose={() => setShow(false)} title="Provision account (admin)" wide>
@@ -201,6 +208,7 @@ export function Disasters() {
       push('success', 'Disaster event created.');
       reset(); setShow(false);
       void qc.invalidateQueries({ queryKey: ['disasters'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
   async function act(id: string, kind: 'activate' | 'close') {
@@ -208,6 +216,7 @@ export function Disasters() {
       await apiSendOne('post', `/disasters/${id}/${kind}`, 'disaster');
       push('success', kind === 'activate' ? 'Disaster activated (others → monitoring).' : 'Disaster closed.');
       void qc.invalidateQueries({ queryKey: ['disasters'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { push('error', formatApiError(err)); }
   }
 
@@ -231,6 +240,8 @@ export function Disasters() {
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">🌊 Disaster events</h1>
         <Button onClick={() => setShow(true)}>+ New event</Button>
       </div>
+      {q.isLoading && <Skeleton className="h-32" />}
+      {q.isError && <ErrorState message="Could not load disaster events." onRetry={() => void q.refetch()} />}
       {q.data && <DataTable rows={q.data.items} columns={cols} meta={q.data.meta} page={page} onPage={setPage} emptyTitle="No disaster events" />}
       <Modal open={show} onClose={() => setShow(false)} title="New disaster event">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
@@ -266,6 +277,7 @@ export function Audit() {
       <Card>
         <Input placeholder="Filter by action (e.g. TEAM_ASSIGN)…" value={action} onChange={(e) => { setAction(e.target.value); setPage(1); }} aria-label="Filter audit log" />
       </Card>
+      {q.isLoading && <Skeleton className="h-32" />}
       {q.isError && <ErrorState message="Could not load audit log." onRetry={() => void q.refetch()} />}
       {q.data && (q.data.items.length === 0 ? <EmptyState title="No audit entries" /> : <DataTable rows={q.data.items} columns={cols} meta={q.data.meta} page={page} onPage={setPage} emptyTitle="No audit entries" />)}
     </div>

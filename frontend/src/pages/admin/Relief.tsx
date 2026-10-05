@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import type { Allocation, InventoryRecord, ReliefItem, ResourceRequest } from '../../lib/types.ts';
@@ -40,7 +40,8 @@ const allocCols: Column<Allocation>[] = [
 
 function useInvalidateAll() {
   const qc = useQueryClient();
-  return () => { void qc.invalidateQueries({ queryKey: ['relief-items'] }); void qc.invalidateQueries({ queryKey: ['inventory'] }); void qc.invalidateQueries({ queryKey: ['resource-requests'] }); void qc.invalidateQueries({ queryKey: ['allocations'] }); void qc.invalidateQueries({ queryKey: ['shortages'] }); };
+  // F-08: stock moves feed dashboard counts, shortage math and the audit trail.
+  return () => { void qc.invalidateQueries({ queryKey: ['relief-items'] }); void qc.invalidateQueries({ queryKey: ['inventory'] }); void qc.invalidateQueries({ queryKey: ['resource-requests'] }); void qc.invalidateQueries({ queryKey: ['allocations'] }); void qc.invalidateQueries({ queryKey: ['shortages'] }); void qc.invalidateQueries({ queryKey: ['dashboard'] }); void qc.invalidateQueries({ queryKey: ['audit-logs'] }); };
 }
 
 export default function Relief() {
@@ -101,6 +102,7 @@ export default function Relief() {
 
       <Card>
         <CardTitle right={<span className="text-xs font-normal text-slate-400">approve first, then allocate</span>}>Field resource requests</CardTitle>
+        {reqs.isLoading && <Skeleton className="h-32" />}
         {reqs.isError && <ErrorState message="Could not load requests." onRetry={() => void reqs.refetch()} />}
         {reqs.data && (
           <DataTable
@@ -116,16 +118,22 @@ export default function Relief() {
       <div className="grid gap-3 lg:grid-cols-2">
         <Card>
           <CardTitle>Inventory</CardTitle>
+          {inv.isLoading && <Skeleton className="h-32" />}
+          {inv.isError && <ErrorState message="Could not load inventory." onRetry={() => void inv.refetch()} />}
           {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={invPage} onPage={setInvPage} emptyTitle="No stock yet" />}
         </Card>
         <Card>
           <CardTitle>Allocation history</CardTitle>
+          {allocs.isLoading && <Skeleton className="h-32" />}
+          {allocs.isError && <ErrorState message="Could not load allocations." onRetry={() => void allocs.refetch()} />}
           {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={allocPage} onPage={setAllocPage} emptyTitle="Nothing allocated yet" />}
         </Card>
       </div>
 
       <Card>
         <CardTitle>Catalogue</CardTitle>
+        {items.isLoading && <Skeleton className="h-32" />}
+        {items.isError && <ErrorState message="Could not load the catalogue." onRetry={() => void items.refetch()} />}
         {items.data && <DataTable rows={items.data.items} columns={itemCols} meta={items.data.meta} page={itemPage} onPage={setItemPage} emptyTitle="No items" />}
       </Card>
 

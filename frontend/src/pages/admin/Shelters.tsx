@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
 import { useShelters } from '../../lib/queries.ts';
@@ -25,7 +25,8 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
   const { options } = useMeta();
   const mut = useMutation({
     mutationFn: (body: Record<string, unknown>) => apiSendOne<Shelter>('patch', `/shelters/${shelter.id}`, 'shelter', body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['shelters'] }); qc.invalidateQueries({ queryKey: ['shelter'] }); },
+    // F-08: occupancy moves dashboard counts and the audit trail.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['shelters'] }); qc.invalidateQueries({ queryKey: ['shelter'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
   async function save() {
     setError(null); setOverrideError(null);
@@ -97,6 +98,7 @@ export default function AdminShelters() {
           <Input placeholder="Search name / location…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} className="min-w-40 flex-1" aria-label="Search shelters" />
         </div>
       </Card>
+      {q.isLoading && <Skeleton className="h-48" />}
       {q.isError && <ErrorState message="Could not load shelters." onRetry={() => void q.refetch()} />}
       {q.data && (
         <DataTable

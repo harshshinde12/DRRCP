@@ -1,89 +1,121 @@
 import { prisma } from '../lib/prisma.js';
 import { pageMeta, parsePagination } from '../utils/pagination.js';
 
-/** Admin operational dashboard (SRS Dashboard.*). */
+const TERMINAL_REQUEST = ['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'];
+const OPEN_RESOURCE = ['PENDING', 'APPROVED', 'PARTIALLY_FULFILLED'];
+
+/** BE-11: every figure below is a DB-side aggregate (groupBy/count/sum). No unbounded row loading. */
 export async function summary() {
-  const [requests, teams, shelters, inventories, openResource, resolved] = await Promise.all([
-    prisma.emergencyRequest.findMany({ select: { status: true, priority: true, emergencyType: true, createdAt: true } }),
-    prisma.rescueTeam.findMany({ select: { availabilityStatus: true } }),
-    prisma.shelter.findMany(),
-    prisma.inventory.findMany({ include: { item: true } }),
-    prisma.resourceRequest.count({ where: { status: { in: ['PENDING', 'APPROVED', 'PARTIALLY_FULFILLED'] } } }),
+  const [
+    requestTotal,
+    active,
+    pending,
+    critical,
+    resolved,
+    byStatus,
+    byPriority,
+    byType,
+    teamTotal,
+    byAvailability,
+    shelterSums,
+    shelterTotal,
+    shelterByStatus,
+    inventorySums,
+    inventoryCount,
+    openResource,
+    // avg response needs (updatedAt − createdAt): Prisma has no date-diff
+    // aggregate, so this stays a narrow two-column select (no full rows).
+    resolvedForAvg,
+  ] = await Promise.all([
+    prisma.emergencyRequest.count(),
+    prisma.emergencyRequest.count({ where: { status: { notIn: TERMINAL_REQUEST } } }),
+    prisma.emergencyRequest.count({ where: { status: 'SUBMITTED' } }),
+    prisma.emergencyRequest.count({ where: { priority: 'CRITICAL', status: { notIn: TERMINAL_REQUEST } } }),
+    prisma.emergencyRequest.count({ where: { status: 'RESOLVED' } }),
+    prisma.emergencyRequest.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.emergencyRequest.groupBy({ by: ['priority'], _count: { _all: true } }),
+    prisma.emergencyRequest.groupBy({ by: ['emergencyType'], _count: { _all: true } }),
+    prisma.rescueTeam.count(),
+    prisma.rescueTeam.groupBy({ by: ['availabilityStatus'], _count: { _all: true } }),
+    prisma.shelter.aggregate({ _sum: { totalCapacity: true, currentOccupancy: true } }),
+    prisma.shelter.count(),
+    prisma.shelter.groupBy({ by: ['operatingStatus'], _count: { _all: true } }),
+    prisma.inventory.aggregate({ _sum: { quantityAvailable: true } }),
+    prisma.inventory.count(),
+    prisma.resourceRequest.count({ where: { status: { in: OPEN_RESOURCE } } }),
     prisma.emergencyRequest.findMany({ where: { status: 'RESOLVED' }, select: { createdAt: true, updatedAt: true } }),
   ]);
 
-  const countBy = (rows: Array<Record<string, unknown>>, key: string) => {
+  const asRecord = <K extends string>(rows: Array<Record<K, string> & { _count: { _all: number } }>, key: K) => {
     const m: Record<string, number> = {};
-    for (const r of rows) {
-      const k = String(r[key]);
-      m[k] = (m[k] ?? 0) + 1;
-    }
+    for (const r of rows) m[r[key]] = r._count._all;
     return m;
   };
 
-  const active = requests.filter((r) => !['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'].includes(r.status)).length;
-  const pending = requests.filter((r) => r.status === 'SUBMITTED').length;
-  const critical = requests.filter((r) => r.priority === 'CRITICAL' && !['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'].includes(r.status)).length;
-
-  const responseHours = resolved.map((r) => (r.updatedAt.getTime() - r.createdAt.getTime()) / 3_600_000);
+  const responseHours = resolvedForAvg.map((r) => (r.updatedAt.getTime() - r.createdAt.getTime()) / 3_600_000);
   const avgResponseHours = responseHours.length ? responseHours.reduce((a, b) => a + b, 0) / responseHours.length : null;
 
-  const totalCapacity = shelters.reduce((a, s) => a + s.totalCapacity, 0);
-  const totalOccupancy = shelters.reduce((a, s) => a + s.currentOccupancy, 0);
+  const totalCapacity = shelterSums._sum.totalCapacity ?? 0;
+  const totalOccupancy = shelterSums._sum.currentOccupancy ?? 0;
 
   return {
     requests: {
-      total: requests.length,
+      total: requestTotal,
       active,
       pending,
       critical,
-      resolved: resolved.length,
-      byStatus: countBy(requests, 'status'),
-      byPriority: countBy(requests, 'priority'),
-      byType: countBy(requests, 'emergencyType'),
+      resolved,
+      byStatus: asRecord(byStatus, 'status'),
+      byPriority: asRecord(byPriority, 'priority'),
+      byType: asRecord(byType, 'emergencyType'),
     },
-    teams: { total: teams.length, byAvailability: countBy(teams, 'availabilityStatus') },
+    teams: { total: teamTotal, byAvailability: asRecord(byAvailability, 'availabilityStatus') },
     shelters: {
-      total: shelters.length,
+      total: shelterTotal,
       totalCapacity,
       totalOccupancy,
       availableCapacity: totalCapacity - totalOccupancy,
       occupancyRate: totalCapacity ? totalOccupancy / totalCapacity : 0,
-      byStatus: countBy(shelters, 'operatingStatus'),
+      byStatus: asRecord(shelterByStatus, 'operatingStatus'),
     },
     inventory: {
-      records: inventories.length,
-      totalUnits: inventories.reduce((a, i) => a + i.quantityAvailable, 0),
+      records: inventoryCount,
+      totalUnits: inventorySums._sum.quantityAvailable ?? 0,
       openResourceRequests: openResource,
     },
-    performance: { avgResponseHours, resolvedCount: resolved.length },
+    performance: { avgResponseHours, resolvedCount: resolved },
   };
 }
 
-/** Requests-per-day series for charts (SRS Dashboard.Charts). */
+/**
+ * Requests-per-day series for charts (SRS Dashboard.Charts).
+ * BE-11: date bucketing runs DB-side — one indexed status-groupBy per day
+ * window (no row loading at all).
+ */
 export async function timeseries(days: number) {
   const since = new Date();
   since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
-  const requests = await prisma.emergencyRequest.findMany({
-    where: { createdAt: { gte: since } },
-    select: { createdAt: true, status: true },
-  });
-  const buckets = new Map<string, { date: string; total: number; resolved: number }>();
-  for (let i = 0; i < days; i++) {
-    const d = new Date(since);
-    d.setDate(since.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    buckets.set(key, { date: key, total: 0, resolved: 0 });
-  }
-  for (const r of requests) {
-    const key = r.createdAt.toISOString().slice(0, 10);
-    const b = buckets.get(key);
-    if (!b) continue;
-    b.total += 1;
-    if (r.status === 'RESOLVED') b.resolved += 1;
-  }
-  return [...buckets.values()];
+  const perDay = await Promise.all(
+    Array.from({ length: days }, (_, i) => {
+      const start = new Date(since);
+      start.setDate(since.getDate() + i);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 1);
+      return prisma.emergencyRequest
+        .groupBy({ by: ['status'], where: { createdAt: { gte: start, lt: end } }, _count: { _all: true } })
+        .then((groups) => {
+          let total = 0;
+          let resolved = 0;
+          for (const g of groups) {
+            total += g._count._all;
+            if (g.status === 'RESOLVED') resolved = g._count._all;
+          }
+          return { date: start.toISOString().slice(0, 10), total, resolved };
+        });
+    }),
+  );
+  return perDay;
 }
 
 export async function listAuditLogs(query: Record<string, unknown>) {

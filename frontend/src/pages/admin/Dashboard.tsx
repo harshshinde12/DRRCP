@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RequestsMap } from '../../components/Maps.tsx';
-import { Card, CardTitle, CardSkeleton, EnumBadge, ErrorState, StatCard } from '../../components/ui.tsx';
+import { Card, CardTitle, CardSkeleton, EnumBadge, ErrorState, Skeleton, StatCard } from '../../components/ui.tsx';
 import { PRIORITY_DOT, useMeta } from '../../lib/meta.tsx';
 import { useDashboard, useRequests, useShortages, useTimeseries } from '../../lib/queries.ts';
 
@@ -37,7 +37,11 @@ export default function AdminDashboard() {
 
       <Card>
         <CardTitle right={<span className="text-xs font-normal text-slate-400">Priority color-coded · updates every 10s</span>}>Live incident map</CardTitle>
-        <RequestsMap requests={(mapReqs.data?.items ?? []).filter((r) => !['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'].includes(r.status))} />
+        {mapReqs.isLoading && <Skeleton className="h-64" />}
+        {mapReqs.isError && <ErrorState message="Could not load the incident map." onRetry={() => void mapReqs.refetch()} />}
+        {!mapReqs.isLoading && !mapReqs.isError && (
+          <RequestsMap requests={(mapReqs.data?.items ?? []).filter((r) => !['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'].includes(r.status))} />
+        )}
       </Card>
 
       <section className="grid gap-3 lg:grid-cols-2">
@@ -74,6 +78,9 @@ export default function AdminDashboard() {
         <Card>
           <CardTitle>14-day trend</CardTitle>
           <div className="h-56">
+            {ts.isLoading ? <Skeleton className="h-56" /> : ts.isError ? (
+              <ErrorState message="Could not load the trend chart." onRetry={() => void ts.refetch()} />
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={ts.data ?? []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -85,6 +92,7 @@ export default function AdminDashboard() {
                 <Area type="monotone" dataKey="resolved" name="Resolved" stroke="#16a34a" fill="#16a34a" fillOpacity={0.2} />
               </AreaChart>
             </ResponsiveContainer>
+            )}
           </div>
         </Card>
         <Card>
@@ -118,6 +126,7 @@ export default function AdminDashboard() {
 function RequestQueuePreview() {
   const q = useRequests({ status: 'SUBMITTED', limit: 5 });
   if (q.isLoading) return <p className="text-sm text-slate-400">Loading…</p>;
+  if (q.isError) return <ErrorState message="Could not load the queue preview." onRetry={() => void q.refetch()} />;
   const items = q.data?.items ?? [];
   if (items.length === 0) return <p className="text-sm text-slate-500">Queue clear — nothing awaiting verification. 🎉</p>;
   return (

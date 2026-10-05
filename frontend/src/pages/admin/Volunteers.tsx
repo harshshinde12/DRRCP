@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
 import { useSuggestVolunteers, useVolunteerTasks } from '../../lib/queries.ts';
@@ -41,7 +41,8 @@ function AssignTaskForm({ onDone }: { onDone: () => void }) {
   const suggest = useSuggestVolunteers(taskType || undefined, location || undefined);
   const mut = useMutation({
     mutationFn: (body: TaskInput) => apiSendOne<VolunteerTask>('post', '/volunteer-tasks', 'task', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['volunteer-tasks'] }),
+    // F-08: task assignment is audited — refresh the trail too.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['volunteer-tasks'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
   async function onSubmit(data: TaskInput) {
     setServerError(null);
@@ -94,11 +95,14 @@ export default function AdminVolunteers() {
       </div>
       <Card>
         <CardTitle>Tasks</CardTitle>
+        {tasks.isLoading && <Skeleton className="h-24" />}
         {tasks.isError && <ErrorState message="Could not load tasks." onRetry={() => void tasks.refetch()} />}
         {tasks.data && <DataTable rows={tasks.data.items} columns={taskColumns} meta={tasks.data.meta} page={tPage} onPage={setTPage} emptyTitle="No volunteer tasks yet" />}
       </Card>
       <Card>
         <CardTitle>Registered volunteers</CardTitle>
+        {vols.isLoading && <Skeleton className="h-24" />}
+        {vols.isError && <ErrorState message="Could not load volunteers." onRetry={() => void vols.refetch()} />}
         {vols.data && <DataTable rows={vols.data.items} columns={volColumns} meta={vols.data.meta} page={page} onPage={setPage} emptyTitle="No volunteers registered" />}
       </Card>
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Assign volunteer task" wide>

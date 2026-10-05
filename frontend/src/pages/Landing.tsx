@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getPaged } from '../lib/api-client.ts';
 import { homeForRole, useAuth } from '../lib/auth.tsx';
 import type { Shelter } from '../lib/types.ts';
-import { Card, CardSkeleton, StatCard } from '../components/ui.tsx';
+import { Card, CardSkeleton, ErrorState, StatCard } from '../components/ui.tsx';
 
 const HELPLINES = [
   { n: '112', d: 'National emergency' },
@@ -18,9 +18,11 @@ export default function Landing() {
   const alertsQ = useQuery({
     queryKey: ['public-alerts'],
     // I-07: paginated envelope via getPaged (was `apiGet … as never`, discarding meta).
-    queryFn: () => getPaged<{ id: string; message: string }>('/notifications', { type: 'PUBLIC_ALERT', limit: 3 }).then((p) => p.items).catch(() => [] as Array<{ id: string; message: string }>),
+    // F-05: failures surface via alertsQ.isError (never silently swallowed).
+    queryFn: () => getPaged<{ id: string; message: string }>('/notifications', { type: 'PUBLIC_ALERT', limit: 3 }).then((p) => p.items),
     enabled: isAuthenticated,
     refetchInterval: 10_000,
+    retry: 1,
   });
 
   const shelters = sheltersQ.data?.items ?? [];
@@ -36,6 +38,13 @@ export default function Landing() {
           <ul className="mt-1 list-disc space-y-1 pl-5">
             {alerts.map((a) => <li key={a.id}>{a.message}</li>)}
           </ul>
+        </div>
+      )}
+      {/* F-05: alert failures are shown, never silently swallowed. */}
+      {isAuthenticated && alertsQ.isError && alerts.length === 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <p>⚠️ Live alerts unavailable right now.</p>
+          <button onClick={() => void alertsQ.refetch()} className="font-bold underline">Retry</button>
         </div>
       )}
 
@@ -56,8 +65,11 @@ export default function Landing() {
       </section>
 
       {/* live stats (public shelter data) */}
+      {/* F-05: never render "0 shelters/beds" on error — show retry instead. */}
       <section aria-label="Live shelter stats" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {sheltersQ.isLoading ? (<><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>) : (
+        {sheltersQ.isLoading ? (<><CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton /></>) : sheltersQ.isError ? (
+          <div className="col-span-2 lg:col-span-4"><ErrorState message="Could not load live shelter stats." onRetry={() => void sheltersQ.refetch()} /></div>
+        ) : (
           <>
             <StatCard label="Open shelters" value={shelters.length} icon="🏠" />
             <StatCard label="Beds available" value={beds.toLocaleString()} icon="🛏️" />

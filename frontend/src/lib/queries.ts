@@ -7,6 +7,12 @@ import type {
 } from './types.ts';
 
 export const POLL = 10_000;
+/** Slow poll for slow-moving dashboard charts (F-08). */
+// Conservative polling policy (F-08/U-04): only live-watched data polls —
+// request status, missions, notifications, dashboard. Static boards/lists
+// (teams, shelters, inventory, tasks, relief, users, disasters, audit)
+// refresh via mutation invalidations, never on a timer.
+export const SLOW_POLL = 30_000;
 
 function pagedKey(base: string, params?: Record<string, unknown>) {
   return [base, ...(params ? [JSON.stringify(params)] : [])];
@@ -43,7 +49,8 @@ export function useSubmitRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Record<string, unknown>) => apiSendOne<EmergencyRequest>('post', '/requests', 'request', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['requests'] }),
+    // F-08: a new request moves dashboard counts and the audit trail.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
 }
 export function useRequestAction() {
@@ -54,13 +61,15 @@ export function useRequestAction() {
       if (kind === 'verify') return apiSendOne<EmergencyRequest>('post', `/requests/${id}/verify`, 'request', body);
       return apiSendOne<EmergencyRequest>('patch', `/requests/${id}/priority`, 'request', body);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); },
+    // F-08: triage moves queue, detail, dashboard, audit — and the matching pool.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); qc.invalidateQueries({ queryKey: ['matching-teams'] }); },
   });
 }
 
 /* ---------- rescue ---------- */
 export function useTeams(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('teams', params), queryFn: () => getPaged<RescueTeamLite>('/teams', params), refetchInterval: POLL });
+  // Static board — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('teams', params), queryFn: () => getPaged<RescueTeamLite>('/teams', params) });
 }
 export function useTeam(id: string | undefined) {
   return useQuery({
@@ -74,7 +83,8 @@ export function useMarkTeamAvailable() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiSendOne<RescueTeamLite>('post', `/teams/${id}/availability`, 'team', { availabilityStatus: 'AVAILABLE' }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['teams'] }); },
+    // F-08: availability moves the teams board, dashboard and audit.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['teams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
 }
 export function useMatchingTeams(requestId: string | undefined) {
@@ -83,6 +93,8 @@ export function useMatchingTeams(requestId: string | undefined) {
     // Backend returns { request, teams } verbatim — multi-key shape, no collapse.
     queryFn: () => apiGet<{ request: { id: string; emergencyType: string; location: string }; teams: RescueTeamLite[] }>(`/requests/${requestId}/matching-teams`),
     enabled: !!requestId,
+    // F-08: refresh ranks while the triage drawer is open (disabled when closed).
+    refetchInterval: POLL,
   });
 }
 export function useAssignTeam() {
@@ -90,7 +102,8 @@ export function useAssignTeam() {
   return useMutation({
     mutationFn: ({ requestId, teamId, override, overrideReason }: { requestId: string; teamId: string; override?: boolean; overrideReason?: string }) =>
       apiSendOne<RescueAssignment>('post', `/requests/${requestId}/assign`, 'assignment', { teamId, override, overrideReason }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); qc.invalidateQueries({ queryKey: ['teams'] }); qc.invalidateQueries({ queryKey: ['assignments'] }); },
+    // F-08: dispatch moves queue, detail, board, missions, dashboard, audit — and ranks.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); qc.invalidateQueries({ queryKey: ['teams'] }); qc.invalidateQueries({ queryKey: ['assignments'] }); qc.invalidateQueries({ queryKey: ['assignment'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); qc.invalidateQueries({ queryKey: ['matching-teams'] }); },
   });
 }
 export function useAssignments(params?: Record<string, unknown>) {
@@ -110,13 +123,14 @@ export function useMissionAction() {
       const suffix = { acknowledge: 'acknowledge', status: 'status', cancel: 'cancel' }[kind];
       return apiSendOne<RescueAssignment>(paths[kind] as 'post' | 'patch', `/assignments/${id}/${suffix}`, 'assignment', body);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['assignments'] }); qc.invalidateQueries({ queryKey: ['assignment'] }); qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); qc.invalidateQueries({ queryKey: ['teams'] }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['assignments'] }); qc.invalidateQueries({ queryKey: ['assignment'] }); qc.invalidateQueries({ queryKey: ['requests'] }); qc.invalidateQueries({ queryKey: ['request'] }); qc.invalidateQueries({ queryKey: ['teams'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); qc.invalidateQueries({ queryKey: ['matching-teams'] }); },
   });
 }
 
 /* ---------- volunteers ---------- */
 export function useVolunteerTasks(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('volunteer-tasks', params), queryFn: () => getPaged<VolunteerTask>('/volunteer-tasks', params), refetchInterval: POLL });
+  // Static work list — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('volunteer-tasks', params), queryFn: () => getPaged<VolunteerTask>('/volunteer-tasks', params) });
 }
 export function useVolunteerTask(id: string | undefined) {
   return useQuery({ queryKey: ['volunteer-task', id], queryFn: () => apiGetOne<VolunteerTask>(`/volunteer-tasks/${id}`, 'task'), enabled: !!id });
@@ -126,7 +140,8 @@ export function useTaskAction() {
   return useMutation({
     mutationFn: ({ id, kind, body }: { id: string; kind: 'accept' | 'decline' | 'status'; body?: unknown }) =>
       apiSendOne<VolunteerTask>(kind === 'status' ? 'patch' : 'post', `/volunteer-tasks/${id}/${kind}`, 'task', body),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['volunteer-tasks'] }); qc.invalidateQueries({ queryKey: ['volunteer-task'] }); },
+    // F-08: task moves are audited — refresh the trail too.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['volunteer-tasks'] }); qc.invalidateQueries({ queryKey: ['volunteer-task'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
 }
 export function useVolunteer(id: string | undefined) {
@@ -143,7 +158,8 @@ export function useSuggestVolunteers(taskType?: string, location?: string) {
 
 /* ---------- shelters ---------- */
 export function useShelters(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('shelters', params), queryFn: () => getPaged<Shelter>('/shelters', params), refetchInterval: POLL });
+  // Static list — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('shelters', params), queryFn: () => getPaged<Shelter>('/shelters', params) });
 }
 export function useShelter(id: string | undefined) {
   return useQuery({ queryKey: ['shelter', id], queryFn: () => apiGetOne<Shelter>(`/shelters/${id}`, 'shelter'), enabled: !!id });
@@ -165,23 +181,27 @@ export function useReliefItem(id: string | undefined) {
   return useQuery({ queryKey: ['relief-item', id], queryFn: () => apiGetOne<ReliefItem>(`/relief-items/${id}`, 'item'), enabled: !!id });
 }
 export function useInventory(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('inventory', params), queryFn: () => getPaged<InventoryRecord>('/inventory', params), refetchInterval: POLL });
+  // Static stock list — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('inventory', params), queryFn: () => getPaged<InventoryRecord>('/inventory', params) });
 }
 export function useInventoryRecord(id: string | undefined) {
   return useQuery({ queryKey: ['inventory-record', id], queryFn: () => apiGetOne<InventoryRecord>(`/inventory/${id}`, 'inventory'), enabled: !!id });
 }
 export function useShortages() {
   // Backend returns the shortage rows array directly in `data`.
-  return useQuery({ queryKey: ['shortages'], queryFn: () => apiGet<ShortageRow[]>('/inventory/shortages'), refetchInterval: POLL });
+  // No polling — refreshed by mutation invalidations (conservative polling).
+  return useQuery({ queryKey: ['shortages'], queryFn: () => apiGet<ShortageRow[]>('/inventory/shortages') });
 }
 export function useResourceRequests(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('resource-requests', params), queryFn: () => getPaged<ResourceRequest>('/resource-requests', params), refetchInterval: POLL });
+  // Static list — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('resource-requests', params), queryFn: () => getPaged<ResourceRequest>('/resource-requests', params) });
 }
 export function useResourceRequest(id: string | undefined) {
   return useQuery({ queryKey: ['resource-request', id], queryFn: () => apiGetOne<ResourceRequest>(`/resource-requests/${id}`, 'resourceRequest'), enabled: !!id });
 }
 export function useAllocations(params?: Record<string, unknown>) {
-  return useQuery({ queryKey: pagedKey('allocations', params), queryFn: () => getPaged<Allocation>('/allocations', params), refetchInterval: POLL });
+  // Static history — no polling (conservative: only live-watched data polls).
+  return useQuery({ queryKey: pagedKey('allocations', params), queryFn: () => getPaged<Allocation>('/allocations', params) });
 }
 export function useAllocation(id: string | undefined) {
   return useQuery({ queryKey: ['allocation', id], queryFn: () => apiGetOne<Allocation>(`/allocations/${id}`, 'allocation'), enabled: !!id });
@@ -206,7 +226,8 @@ export function useDashboard() {
 }
 export function useTimeseries(days = 14) {
   // Backend returns the points array directly in `data`.
-  return useQuery({ queryKey: ['timeseries', days], queryFn: () => apiGet<TimeseriesPoint[]>('/dashboard/timeseries', { params: { days } }) });
+  // Slow-moving chart — slow poll keeps the dashboard ● LIVE honest.
+  return useQuery({ queryKey: ['timeseries', days], queryFn: () => apiGet<TimeseriesPoint[]>('/dashboard/timeseries', { params: { days } }), refetchInterval: SLOW_POLL });
 }
 export function useAuditLogs(params?: Record<string, unknown>) {
   return useQuery({ queryKey: pagedKey('audit-logs', params), queryFn: () => getPaged<AuditEntry>('/audit-logs', params) });

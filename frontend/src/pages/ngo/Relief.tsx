@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,6 +25,9 @@ function ApproveButtons({ r }: { r: ResourceRequest }) {
       await apiSendOne('post', `/resource-requests/${r.id}/${kind}`, 'resourceRequest');
       push('success', `Request ${kind}d.`);
       void qc.invalidateQueries({ queryKey: ['resource-requests'] });
+      void qc.invalidateQueries({ queryKey: ['shortages'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { push('error', formatApiError(err)); }
   }
   if (r.status !== 'PENDING') return <span className="text-xs text-slate-400">fulfilled {r.quantityFulfilled}/{r.quantityRequired}</span>;
@@ -55,6 +58,9 @@ export function NgoInventory() {
       push('success', 'Stock registered.');
       reset(); setShowStock(false);
       void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['shortages'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, push }); }
   }
 
@@ -64,6 +70,7 @@ export function NgoInventory() {
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">📦 Inventory</h1>
         <Button onClick={() => setShowStock(true)}>+ Register stock</Button>
       </div>
+      {inv.isLoading && <Skeleton className="h-32" />}
       {inv.isError && <ErrorState message="Could not load inventory." onRetry={() => void inv.refetch()} />}
       {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={page} onPage={setPage} emptyTitle="No stock registered" />}
       <Modal open={showStock} onClose={() => setShowStock(false)} title="Register stock">
@@ -102,6 +109,9 @@ export function NgoAllocations() {
       void qc.invalidateQueries({ queryKey: ['allocations'] });
       void qc.invalidateQueries({ queryKey: ['resource-requests'] });
       void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['shortages'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { reportFormError(err, { setError: setError as never, push }); }
   }
 
@@ -111,6 +121,7 @@ export function NgoAllocations() {
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">🚚 Allocations</h1>
         <Button onClick={() => setShow(true)}>Allocate →</Button>
       </div>
+      {allocs.isLoading && <Skeleton className="h-32" />}
       {allocs.isError && <ErrorState message="Could not load allocations." onRetry={() => void allocs.refetch()} />}
       {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={page} onPage={setPage} emptyTitle="Nothing allocated yet" />}
       <Modal open={show} onClose={() => setShow(false)} title="Allocate stock">
@@ -153,6 +164,8 @@ export function NgoFieldRequests() {
           </ul>
         </Card>
       )}
+      {reqs.isLoading && <Skeleton className="h-32" />}
+      {reqs.isError && <ErrorState message="Could not load field requests." onRetry={() => void reqs.refetch()} />}
       {reqs.data && <DataTable rows={reqs.data.items} columns={reqCols} meta={reqs.data.meta} page={page} onPage={setPage} emptyTitle="No field requests" />}
     </div>
   );

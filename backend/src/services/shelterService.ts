@@ -144,7 +144,18 @@ export async function deleteShelter(actorId: string, id: string) {
 
 /** Nearby OPEN shelters with free beds, sorted by distance (Haversine). Public per SRS SE-2. */
 export async function nearbyShelters(lat: number, lng: number, radiusKm: number, limit: number) {
-  const shelters = await prisma.shelter.findMany({ where: { operatingStatus: 'OPEN' } });
+  // BE-12: coarse lat/lng box runs in the DB (always contains the radius
+  // circle); exact Haversine filter + sort stay in JS on the capped set.
+  const dLat = radiusKm / 111;
+  const dLng = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  const shelters = await prisma.shelter.findMany({
+    where: {
+      operatingStatus: 'OPEN',
+      latitude: { gte: lat - dLat, lte: lat + dLat },
+      longitude: { gte: lng - dLng, lte: lng + dLng },
+    },
+    take: 200,
+  });
   return shelters
     .map(withAvailability)
     .filter((s) => s.availableCapacity > 0 && s.latitude != null && s.longitude != null)

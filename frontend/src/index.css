@@ -27,6 +27,11 @@
   .dark .text-slate-500 { @apply text-slate-400; }
 }
 
+/* F-09: grid items may not impose their min-content width on the track —
+   nowrap descendants (long facility lines, 640px tables) otherwise force
+   page-level horizontal overflow on phones. Lets tracks shrink normally. */
+.grid > * { min-width: 0; }
+
 /* Leaflet fixes: size + dark-mode tiles dim */
 .leaflet-container { @apply z-0 rounded-xl font-sans; }
 .dark .leaflet-tile-pane { filter: brightness(0.85) contrast(1.05); }

@@ -100,9 +100,31 @@ export async function setTeamAvailability(adminId: string, id: string, status: T
 export async function matchingTeams(requestId: string) {
   const request = await prisma.emergencyRequest.findUnique({ where: { id: requestId } });
   if (!request) throw new HttpError(404, 'Emergency request not found');
-  const teams = await prisma.rescueTeam.findMany({ where: { availabilityStatus: 'AVAILABLE' } });
+  // BE-12: coarse filters run in the DB (type-hit UNION city bbox, capped) —
+  // JS only ranks the bounded candidate set instead of the whole table.
+  const TOP_K = 100;
+  const hasCoords = request.latitude != null && request.longitude != null;
+  // ±1.5° ≈ 165km coarse box: always contains the metro area, bounds the scan.
+  const bbox = hasCoords
+    ? {
+        latitude: { gte: (request.latitude as number) - 1.5, lte: (request.latitude as number) + 1.5 },
+        longitude: { gte: (request.longitude as number) - 1.5, lte: (request.longitude as number) + 1.5 },
+      }
+    : {};
+  const [typeHits, boxed] = await Promise.all([
+    prisma.rescueTeam.findMany({
+      where: {
+        availabilityStatus: 'AVAILABLE',
+        OR: [{ teamType: { contains: request.emergencyType } }, { capability: { contains: request.emergencyType } }],
+      },
+      take: TOP_K,
+    }),
+    prisma.rescueTeam.findMany({ where: { availabilityStatus: 'AVAILABLE', ...bbox }, take: TOP_K }),
+  ]);
+  const seen = new Set<string>();
+  const candidates = [...typeHits, ...boxed].filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
   const needTokens = tokenize(request.emergencyType);
-  const ranked = teams
+  const ranked = candidates
     .map((t) => {
       const caps = tokenize(t.capability);
       const typeHit = t.teamType.toUpperCase().includes(request.emergencyType) || caps.some((c) => needTokens.includes(c));

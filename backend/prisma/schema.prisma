@@ -48,7 +48,6 @@ model User {
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-
   // Relations
   emergencyRequests      EmergencyRequest[]   @relation("Requester")
   volunteerTasks         VolunteerTask[]      @relation("VolunteerTasks")
@@ -61,6 +60,8 @@ model User {
   sheltersManaged        Shelter[]            @relation("ShelterManager")
   inventoriesManaged     Inventory[]          @relation("InventoryManager")
   rescueTeamProfile      RescueTeam?
+
+  @@index([role, isActive])
 }
 
 model Disaster {
@@ -74,6 +75,8 @@ model Disaster {
   requests     EmergencyRequest[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([status])
 }
 
 model EmergencyRequest {
@@ -104,6 +107,7 @@ model EmergencyRequest {
   @@index([requesterId])
   @@index([disasterId])
   @@index([createdAt])
+  @@index([emergencyType])
 }
 
 model RescueTeam {
@@ -121,6 +125,8 @@ model RescueTeam {
   assignments        RescueAssignment[]
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
+
+  @@index([availabilityStatus])
 }
 
 model RescueAssignment {
@@ -170,6 +176,7 @@ model VolunteerTask {
 
   @@index([volunteerId])
   @@index([status])
+  @@index([taskType])
 }
 
 model Shelter {
@@ -242,6 +249,7 @@ model ResourceRequest {
   @@index([status])
   @@index([requesterId])
   @@index([itemId])
+  @@index([shelterId])
 }
 
 model ResourceAllocation {

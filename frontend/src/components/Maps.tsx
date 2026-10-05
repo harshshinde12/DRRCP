@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { Link } from 'react-router-dom';
 import { PRIORITY_DOT } from '../lib/meta.tsx';
@@ -18,17 +18,27 @@ function dot(color: string, size = 18): L.DivIcon {
 
 function FitToPoints({ points }: { points: Array<[number, number]> }) {
   const map = useMap();
+  // U-04: the point SET is the dependency — identical polls (same rounded
+  // coords, any order) must not re-fit the map (jitter). A genuinely new set
+  // still re-fits once.
+  const key = useMemo(
+    () => points.map(([a, b]) => `${a.toFixed(4)},${b.toFixed(4)}`).sort().join('|'),
+    [points],
+  );
+  const appliedKey = useRef<string | null>(null);
   useEffect(() => {
+    if (key === appliedKey.current) return;
+    appliedKey.current = key;
     if (points.length > 1) map.fitBounds(L.latLngBounds(points).pad(0.2));
     else if (points.length === 1) map.setView(points[0], 12);
-  }, [map, points.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, key, points]);
   return null;
 }
 
 export interface MapRequest { id: string; latitude: number | null; longitude: number | null; location: string; priority: string; displayStatus: string; }
 
 /** Admin live map: requests color-coded by priority. */
-export function RequestsMap({ requests, height = 420 }: { requests: MapRequest[]; height?: number }) {
+export function RequestsMap({ requests, height = 'min(420px, 72vw)' }: { requests: MapRequest[]; height?: number | string }) {
   const pts = requests.filter((r) => r.latitude != null && r.longitude != null).map((r) => [r.latitude as number, r.longitude as number] as [number, number]);
   return (
     <MapContainer center={MUMBAI} zoom={11} style={{ height, width: '100%' }} scrollWheelZoom={false}>
@@ -49,7 +59,7 @@ export function RequestsMap({ requests, height = 420 }: { requests: MapRequest[]
 export interface MapShelter { id: string; name: string; latitude: number | null; longitude: number | null; availableCapacity: number; }
 
 /** Shelter map: green beds-available markers + user position. */
-export function SheltersMap({ shelters, userPos, height = 380 }: { shelters: MapShelter[]; userPos?: [number, number] | null; height?: number }) {
+export function SheltersMap({ shelters, userPos, height = 'min(380px, 66vw)' }: { shelters: MapShelter[]; userPos?: [number, number] | null; height?: number | string }) {
   const pts = shelters.filter((s) => s.latitude != null && s.longitude != null).map((s) => [s.latitude as number, s.longitude as number] as [number, number]);
   return (
     <MapContainer center={userPos ?? MUMBAI} zoom={11} style={{ height, width: '100%' }}>
@@ -67,7 +77,7 @@ export function SheltersMap({ shelters, userPos, height = 380 }: { shelters: Map
 }
 
 /** Click-to-pick coordinates for the emergency form + shelter/team forms. */
-export function LocationPicker({ value, onChange, height = 300 }: { value: { latitude: number | null; longitude: number | null }; onChange: (v: { latitude: number; longitude: number }) => void; height?: number }) {
+export function LocationPicker({ value, onChange, height = 'min(300px, 62vw)' }: { value: { latitude: number | null; longitude: number | null }; onChange: (v: { latitude: number; longitude: number }) => void; height?: number | string }) {
   const [geoError, setGeoError] = useState<string | null>(null);
 
   function Clicker() {

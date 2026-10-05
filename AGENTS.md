@@ -79,7 +79,7 @@ se project/
     src/lib/meta.tsx      # MetaProvider: GET /api/meta → options()/label()/badgeClass(); PRIORITY_DOT hexes
     src/lib/auth.tsx      # AuthProvider (login/register/logout/me), homeForRole()
     src/lib/queryClient.ts# 10s stale, no retry on 401/403/404
-    src/lib/queries.ts    # React Query hooks per resource, POLL=10s refetch, mutations invalidate
+    src/lib/queries.ts    # React Query hooks per resource; 10s poll on live data only (requests/missions/notifications/dashboard), static lists via invalidation
     src/components/ui.tsx # Button/Card/Badge/EnumBadge/inputs(forwardRef!)/Modal/DataTable/Toast/Skeleton/StatCard
     src/components/StatusBits.tsx # StatusTimeline (meta lifecycle + displayStatus/missionStatus), AssignmentChip
     src/components/Maps.tsx       # RequestsMap/SheltersMap/LocationPicker (Leaflet DivIcon dots, OSM tiles)

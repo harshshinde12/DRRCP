@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EmptyState, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { useAuth } from '../../lib/auth.tsx';
 import { useMeta } from '../../lib/meta.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
@@ -43,7 +43,8 @@ function RaiseRequestForm({ shelters, onDone }: { shelters: Shelter[]; onDone: (
   const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<ReqInput>({ resolver: zodResolver(reqSchema), defaultValues: { shelterId: shelters[0]?.id ?? '', priority: 'MEDIUM' } });
   const mut = useMutation({
     mutationFn: (body: ReqInput) => apiSendOne<ResourceRequest>('post', '/resource-requests', 'resourceRequest', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['resource-requests'] }),
+    // F-08: a new need moves shortages, dashboard and audit.
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['resource-requests'] }); qc.invalidateQueries({ queryKey: ['shortages'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['audit-logs'] }); },
   });
   async function onSubmit(data: ReqInput) {
     setServerError(null);
@@ -128,6 +129,8 @@ export function ShelterManagerHome() {
       push('success', overCapacity ? 'Occupancy updated (override logged).' : 'Occupancy updated.');
       setEditing(null);
       void qc.invalidateQueries({ queryKey: ['shelters'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     } catch (err) { setError(formatApiError(err)); }
   }
 
@@ -137,13 +140,14 @@ export function ShelterManagerHome() {
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">🏠 My shelters</h1>
         <Button onClick={() => setRaise(true)} disabled={mine.length === 0} title={mine.length === 0 ? 'No shelters assigned yet' : undefined}>+ Raise resource request</Button>
       </div>
+      {q.isLoading && <><Skeleton className="h-40" /><Skeleton className="h-40" /></>}
       {q.isError && <ErrorState message="Could not load shelters." onRetry={() => void q.refetch()} />}
       {q.data && mine.length === 0 && <EmptyState title="No shelters assigned yet" hint="Ask an administrator to register a shelter under your account. The resource-request form stays disabled until then." />}
       <div className="grid gap-3 md:grid-cols-2">
         {mine.map((s) => (
           <Card key={s.id}>
             <div className="flex items-start justify-between gap-2">
-              <div><p className="font-bold text-slate-900 dark:text-white">{s.name}</p><p className="text-xs text-slate-500">📍 {s.location} · {s.facilities.split(',').join(' · ')}</p></div>
+              <div className="min-w-0"><p className="truncate font-bold text-slate-900 dark:text-white">{s.name}</p><p className="truncate text-xs text-slate-500">📍 {s.location} · {s.facilities.split(',').join(' · ')}</p></div>
               <EnumBadge group="shelterStatuses" value={s.operatingStatus} />
             </div>
             <Gauge shelter={s} />
@@ -190,6 +194,7 @@ export function ShelterRequests() {
   return (
     <div className="space-y-3">
       <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">📦 My resource requests</h1>
+      {q.isLoading && <Skeleton className="h-32" />}
       {q.isError && <ErrorState message="Could not load requests." onRetry={() => void q.refetch()} />}
       {q.data && (q.data.items.length === 0
         ? <EmptyState title="No requests raised" hint="Raise one from My shelters when supplies run low." />

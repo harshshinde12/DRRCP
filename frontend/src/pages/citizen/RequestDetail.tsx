@@ -4,6 +4,31 @@ import { Button, Card, CardTitle, EmptyState, EnumBadge, ErrorState, Skeleton, f
 import { useMeta } from '../../lib/meta.tsx';
 import { useRequest, useRequestAction, useRequestHistory } from '../../lib/queries.ts';
 
+/** F-05: audit metadata carries duplicate-link / override / dispatch context — render it instead of dropping it. */
+function renderMetadata(metadata?: string | null) {
+  if (!metadata) return null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(metadata) as Record<string, unknown>;
+  } catch {
+    return <span className="text-slate-500">{metadata}</span>;
+  }
+  const bits: string[] = [];
+  const pick = (v: unknown) => (typeof v === 'string' || typeof v === 'number' ? String(v) : null);
+  const dup = pick(parsed.duplicateOfId);
+  if (dup) bits.push(`duplicate of ${dup.slice(0, 8)}…`);
+  const team = pick(parsed.team) ?? pick(parsed.teamId);
+  if (team) bits.push(`team ${team}`);
+  const reason = pick(parsed.overrideReason) ?? pick(parsed.reason);
+  if (reason) bits.push(`reason: ${reason}`);
+  const asg = pick(parsed.assignmentId);
+  if (asg) bits.push(`assignment ${asg.slice(0, 8)}…`);
+  const prio = pick(parsed.priority);
+  if (prio) bits.push(`priority ${prio}`);
+  if (bits.length === 0) return null;
+  return <span className="text-slate-500">({bits.join(' · ')})</span>;
+}
+
 export default function RequestDetail() {
   const { id } = useParams();
   const { push } = useToast();
@@ -70,16 +95,20 @@ export default function RequestDetail() {
       <Card>
         <CardTitle>History</CardTitle>
         {hist.isLoading && <Skeleton />}
-        {hist.data && hist.data.length === 0 && <EmptyState title="No events yet" />}
+        {hist.isError && <ErrorState message="Could not load the event history." onRetry={() => void hist.refetch()} />}
+        {!hist.isLoading && !hist.isError && hist.data && hist.data.length === 0 && <EmptyState title="No events yet" />}
+        {!hist.isError && (
         <ol className="space-y-2">
           {(hist.data ?? []).map((h) => (
             <li key={h.id} className="flex flex-wrap gap-2 text-sm">
               <span className="font-mono text-xs text-slate-400">{new Date(h.timestamp).toLocaleString()}</span>
               <span className="font-semibold">{h.action.replace(/_/g, ' ')}</span>
               {h.actor && <span className="text-slate-500">by {h.actor.name}</span>}
+              {renderMetadata(h.metadata)}
             </li>
           ))}
         </ol>
+        )}
       </Card>
     </div>
   );
