@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { homeForRole, useAuth } from '../lib/auth.tsx';
-import { Button, Card, Field, Input, formatApiError } from '../components/ui.tsx';
+import { Button, Card, Field, Input, reportFormError } from '../components/ui.tsx';
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -26,7 +26,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: string } };
   const [serverError, setServerError] = useState<string | null>(null);
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } });
+  const { register, handleSubmit, setValue, setError, formState: { errors, isSubmitting } } = useForm<LoginInput>({ resolver: zodResolver(loginSchema), defaultValues: { email: '', password: '' } });
 
   if (isAuthenticated && user) return <Navigate to={location.state?.from ?? homeForRole(user.role)} replace />;
 
@@ -36,7 +36,7 @@ export default function Login() {
       const u = await login(data.email, data.password);
       navigate(location.state?.from ?? homeForRole(u.role), { replace: true });
     } catch (err) {
-      setServerError(formatApiError(err));
+      reportFormError(err, { setError: setError as never, setServerError });
     }
   }
 

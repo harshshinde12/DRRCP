@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, useToast, type Column } from '../../components/ui.tsx';
-import { apiSend } from '../../lib/api-client.ts';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { apiSendOne } from '../../lib/api-client.ts';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Allocation, InventoryRecord, ResourceRequest } from '../../lib/types.ts';
@@ -22,7 +22,7 @@ function ApproveButtons({ r }: { r: ResourceRequest }) {
   const qc = useQueryClient();
   async function decide(kind: 'approve' | 'reject') {
     try {
-      await apiSend('post', `/resource-requests/${r.id}/${kind}`);
+      await apiSendOne('post', `/resource-requests/${r.id}/${kind}`, 'resourceRequest');
       push('success', `Request ${kind}d.`);
       void qc.invalidateQueries({ queryKey: ['resource-requests'] });
     } catch (err) { push('error', formatApiError(err)); }
@@ -43,17 +43,19 @@ export function NgoInventory() {
   const { push } = useToast();
   const qc = useQueryClient();
   const [showStock, setShowStock] = useState(false);
-  const inv = useInventory({ limit: 100 });
+  // F-04: real pagination state (was page={1} dead controls).
+  const [page, setPage] = useState(1);
+  const inv = useInventory({ page, limit: 15 });
   const items = useReliefItems({ limit: 100 });
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<z.infer<typeof stockSchema>>({ resolver: zodResolver(stockSchema) });
+  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof stockSchema>>({ resolver: zodResolver(stockSchema) });
 
   async function onSubmit(data: z.infer<typeof stockSchema>) {
     try {
-      await apiSend('post', '/inventory', data);
+      await apiSendOne('post', '/inventory', 'inventory', data);
       push('success', 'Stock registered.');
       reset(); setShowStock(false);
       void qc.invalidateQueries({ queryKey: ['inventory'] });
-    } catch (err) { push('error', formatApiError(err)); }
+    } catch (err) { reportFormError(err, { setError: setError as never, push }); }
   }
 
   return (
@@ -63,7 +65,7 @@ export function NgoInventory() {
         <Button onClick={() => setShowStock(true)}>+ Register stock</Button>
       </div>
       {inv.isError && <ErrorState message="Could not load inventory." onRetry={() => void inv.refetch()} />}
-      {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={1} onPage={() => undefined} emptyTitle="No stock registered" />}
+      {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={page} onPage={setPage} emptyTitle="No stock registered" />}
       <Modal open={showStock} onClose={() => setShowStock(false)} title="Register stock">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <Field label="Item" error={errors.itemId?.message}>
@@ -85,20 +87,22 @@ export function NgoAllocations() {
   const { push } = useToast();
   const qc = useQueryClient();
   const [show, setShow] = useState(false);
-  const allocs = useAllocations({ limit: 100 });
+  // F-04: real pagination state.
+  const [page, setPage] = useState(1);
+  const allocs = useAllocations({ page, limit: 15 });
   const reqs = useResourceRequests({ limit: 100 });
   const inv = useInventory({ limit: 100 });
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<z.infer<typeof allocSchema>>({ resolver: zodResolver(allocSchema) });
+  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof allocSchema>>({ resolver: zodResolver(allocSchema) });
 
   async function onSubmit(data: z.infer<typeof allocSchema>) {
     try {
-      await apiSend('post', '/allocations', data);
+      await apiSendOne('post', '/allocations', 'allocation', data);
       push('success', 'Stock allocated.');
       reset(); setShow(false);
       void qc.invalidateQueries({ queryKey: ['allocations'] });
       void qc.invalidateQueries({ queryKey: ['resource-requests'] });
       void qc.invalidateQueries({ queryKey: ['inventory'] });
-    } catch (err) { push('error', formatApiError(err)); }
+    } catch (err) { reportFormError(err, { setError: setError as never, push }); }
   }
 
   return (
@@ -108,7 +112,7 @@ export function NgoAllocations() {
         <Button onClick={() => setShow(true)}>Allocate →</Button>
       </div>
       {allocs.isError && <ErrorState message="Could not load allocations." onRetry={() => void allocs.refetch()} />}
-      {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={1} onPage={() => undefined} emptyTitle="Nothing allocated yet" />}
+      {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={page} onPage={setPage} emptyTitle="Nothing allocated yet" />}
       <Modal open={show} onClose={() => setShow(false)} title="Allocate stock">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <Field label="Approved request" error={errors.resourceRequestId?.message}>
@@ -134,7 +138,9 @@ export function NgoAllocations() {
 }
 
 export function NgoFieldRequests() {
-  const reqs = useResourceRequests({ limit: 100 });
+  // F-04: real pagination state.
+  const [page, setPage] = useState(1);
+  const reqs = useResourceRequests({ page, limit: 15 });
   const shortages = useShortages();
   return (
     <div className="space-y-3">
@@ -147,7 +153,7 @@ export function NgoFieldRequests() {
           </ul>
         </Card>
       )}
-      {reqs.data && <DataTable rows={reqs.data.items} columns={reqCols} meta={reqs.data.meta} page={1} onPage={() => undefined} emptyTitle="No field requests" />}
+      {reqs.data && <DataTable rows={reqs.data.items} columns={reqCols} meta={reqs.data.meta} page={page} onPage={setPage} emptyTitle="No field requests" />}
     </div>
   );
 }

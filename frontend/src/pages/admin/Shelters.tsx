@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
-import { apiSend } from '../../lib/api-client.ts';
+import { apiSendOne } from '../../lib/api-client.ts';
 import { useShelters } from '../../lib/queries.ts';
 import type { Shelter } from '../../lib/types.ts';
 
@@ -19,15 +19,34 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
   const [occupancy, setOccupancy] = useState(shelter.currentOccupancy);
   const [status, setStatus] = useState(shelter.operatingStatus);
   const [override, setOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideError, setOverrideError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { options } = useMeta();
   const mut = useMutation({
-    mutationFn: () => apiSend<Shelter>('patch', `/shelters/${shelter.id}`, { currentOccupancy: occupancy, operatingStatus: status, emergencyOverride: override || undefined }),
+    mutationFn: (body: Record<string, unknown>) => apiSendOne<Shelter>('patch', `/shelters/${shelter.id}`, 'shelter', body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['shelters'] }); qc.invalidateQueries({ queryKey: ['shelter'] }); },
   });
   async function save() {
-    setError(null);
-    try { await mut.mutateAsync(); push('success', 'Shelter updated.'); onDone(); }
+    setError(null); setOverrideError(null);
+    const overCapacity = occupancy > shelter.totalCapacity;
+    if (overCapacity && !override) {
+      setError('Occupancy exceeds capacity — tick the emergency override and give a reason.');
+      return;
+    }
+    if (overCapacity && overrideReason.trim().length < 5) {
+      setOverrideError('A reason of at least 5 characters is required — it goes into the audit trail.');
+      return;
+    }
+    try {
+      await mut.mutateAsync({
+        currentOccupancy: occupancy,
+        operatingStatus: status,
+        ...(overCapacity ? { emergencyOverride: true, overrideReason: overrideReason.trim() } : { emergencyOverride: override || undefined }),
+      });
+      push('success', overCapacity ? 'Shelter updated (override logged).' : 'Shelter updated.');
+      onDone();
+    }
     catch (err) { setError(formatApiError(err)); }
   }
   const pct = shelter.totalCapacity ? Math.round((occupancy / shelter.totalCapacity) * 100) : 0;
@@ -42,10 +61,15 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
       </div>
       <Field label="Operating status"><Select value={status} onChange={(e) => setStatus(e.target.value)}>{options('shelterStatuses').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></Field>
       {occupancy > shelter.totalCapacity && (
-        <label className="flex items-start gap-2 rounded-lg bg-red-50 p-2.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-          <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} className="mt-0.5" />
-          Emergency override — occupancy exceeds capacity. This is audited.
-        </label>
+        <div className="space-y-2 rounded-lg bg-red-50 p-2.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} className="mt-0.5" aria-label="Emergency override" />
+            Emergency override — occupancy exceeds capacity. This is audited.
+          </label>
+          <Field label="Override reason (mandatory)" error={overrideError ?? undefined} htmlFor="admin-ovr">
+            <Input id="admin-ovr" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="e.g. Flood surge, no alternate beds" />
+          </Field>
+        </div>
       )}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <Button onClick={() => void save()} disabled={mut.isPending} className="w-full">{mut.isPending ? 'Saving…' : 'Save'}</Button>

@@ -88,7 +88,10 @@ describe('shelters: capacity block + nearby + low-stock alert', () => {
   it('occupancy beyond capacity is blocked unless emergencyOverride', async () => {
     const over = await request(app).patch(`/api/shelters/${fx.shelter.id}`).set(bearer(tok.manager)).send({ currentOccupancy: 101 });
     expect(over.status).toBe(422);
-    const okRes = await request(app).patch(`/api/shelters/${fx.shelter.id}`).set(bearer(tok.manager)).send({ currentOccupancy: 101, emergencyOverride: true });
+    // I-04: over-capacity override needs a recorded reason (audited).
+    const noReason = await request(app).patch(`/api/shelters/${fx.shelter.id}`).set(bearer(tok.manager)).send({ currentOccupancy: 101, emergencyOverride: true });
+    expect(noReason.status).toBe(422);
+    const okRes = await request(app).patch(`/api/shelters/${fx.shelter.id}`).set(bearer(tok.manager)).send({ currentOccupancy: 101, emergencyOverride: true, overrideReason: 'Flood surge, no alternate beds nearby' });
     expect(okRes.status).toBe(200);
     expect(okRes.body.data.shelter.availableCapacity).toBe(-1);
   });

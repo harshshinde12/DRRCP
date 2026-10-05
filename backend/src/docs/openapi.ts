@@ -258,14 +258,14 @@ export const openApiSpec = {
         requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['name', 'location', 'totalCapacity', 'facilities'], properties: { name: { type: 'string' }, location: { type: 'string' }, latitude: { type: 'number' }, longitude: { type: 'number' }, totalCapacity: { type: 'integer' }, currentOccupancy: { type: 'integer' }, facilities: { type: 'string' }, operatingStatus: { type: 'string' }, managerId: { type: 'string' } } } } }},
         responses: { '201': { description: 'created' } },
       }),
-      get: { summary: 'List shelters (public)', tags: ['Shelters'], parameters: [...pageParams, { name: 'operatingStatus', in: 'query', schema: { type: 'string' } }, { name: 'facility', in: 'query', schema: { type: 'string' } }, { name: 'openOnly', in: 'query', schema: { type: 'boolean' } }], responses: { '200': { description: 'ok' } } },
+      get: { summary: 'List shelters (public)', tags: ['Shelters'], parameters: [...pageParams, { name: 'operatingStatus', in: 'query', schema: { type: 'string' } }, { name: 'facility', in: 'query', schema: { type: 'string' } }, { name: 'openOnly', in: 'query', schema: { type: 'boolean' } }, { name: 'managerId', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } },
     },
     '/shelters/nearby': {
       get: { summary: 'Nearby OPEN shelters with free beds (public, Haversine)', tags: ['Shelters'], parameters: [{ name: 'lat', in: 'query', required: true, schema: { type: 'number' } }, { name: 'lng', in: 'query', required: true, schema: { type: 'number' } }, { name: 'radiusKm', in: 'query', schema: { type: 'number' } }, { name: 'limit', in: 'query', schema: { type: 'integer' } }], responses: { '200': { description: 'ok' } } },
     },
     '/shelters/{id}': {
       get: { summary: 'Get shelter (public)', tags: ['Shelters'], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } },
-      patch: op('Update occupancy / facilities / status (occupancy ≤ capacity unless emergencyOverride)', ['Shelters'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' }, '422': err('capacity exceeded') } }),
+      patch: op('Update occupancy / facilities / status (occupancy ≤ capacity unless emergencyOverride + overrideReason, audited)', ['Shelters'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { currentOccupancy: { type: 'integer' }, operatingStatus: { type: 'string' }, emergencyOverride: { type: 'boolean' }, overrideReason: { type: 'string' } } } } } }, responses: { '200': { description: 'ok' }, '422': err('capacity exceeded / reason required') } }),
       delete: op('Delete shelter', ['Shelters'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),
     },
     // ── Relief ──

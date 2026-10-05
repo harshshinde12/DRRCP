@@ -3,9 +3,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, Field, Input, Select, Skeleton, formatApiError, useToast } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, Field, Input, Select, Skeleton, formatApiError, reportFormError, useToast } from '../../components/ui.tsx';
 import { useAuth } from '../../lib/auth.tsx';
-import { apiGet, apiSend } from '../../lib/api-client.ts';
+import { apiGetOne, apiSendOne } from '../../lib/api-client.ts';
 import type { User } from '../../lib/types.ts';
 
 const profileSchema = z.object({
@@ -24,13 +24,13 @@ export default function Profile() {
   const qc = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting, isDirty } } = useForm<ProfileInput>({ resolver: zodResolver(profileSchema) });
+  const { register, handleSubmit, reset, watch, setValue, setError, formState: { errors, isSubmitting, isDirty } } = useForm<ProfileInput>({ resolver: zodResolver(profileSchema) });
   const availability = watch('availability');
 
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
-    apiGet<User>(`/volunteers/${user.id}`)
+    apiGetOne<User>(`/volunteers/${user.id}`, 'volunteer')
       .then((v) => { if (!cancelled) reset({ phone: v.phone ?? '', skills: v.skills ?? '', availability: v.availability ?? 'FULL_TIME', serviceArea: v.serviceArea ?? '' }); })
       .catch((err) => { if (!cancelled) setServerError(formatApiError(err)); });
     return () => { cancelled = true; };
@@ -40,11 +40,11 @@ export default function Profile() {
     if (!user) return;
     setServerError(null); setSaved(false);
     try {
-      await apiSend('patch', `/volunteers/${user.id}`, data);
+      await apiSendOne('patch', `/volunteers/${user.id}`, 'volunteer', data);
       push('success', 'Profile saved.');
       setSaved(true);
       void qc.invalidateQueries({ queryKey: ['me'] });
-    } catch (err) { setServerError(formatApiError(err)); }
+    } catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
 
   if (!user) return <Skeleton className="h-64" />;

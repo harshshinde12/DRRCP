@@ -271,6 +271,68 @@ export function useToast() {
 }
 
 export function formatApiError(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: string }).message);
+  if (err && typeof err === 'object' && 'message' in err) {
+    const base = String((err as { message: string }).message);
+    const details = (err as { details?: unknown }).details;
+    const fields = extractFieldErrors(err);
+    if (fields) {
+      const bits = Object.entries(fields).map(([f, msgs]) => `${f}: ${msgs.join(', ')}`);
+      return `${base} — ${bits.join(' · ')}`;
+    }
+    void details;
+    return base;
+  }
   return 'Request failed';
+}
+
+/**
+ * I-06: surface backend Zod field errors (error.details from validateBody/
+ * validateQuery → { field: string[] }). Returns null when there are none.
+ */
+export function extractFieldErrors(err: unknown): Record<string, string[]> | null {
+  const details = err && typeof err === 'object' && 'details' in err
+    ? (err as { details?: unknown }).details
+    : null;
+  if (details && typeof details === 'object' && !Array.isArray(details)) {
+    const out: Record<string, string[]> = {};
+    let found = false;
+    for (const [k, v] of Object.entries(details as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        const msgs = v.filter((m): m is string => typeof m === 'string');
+        if (msgs.length > 0) { out[k] = msgs; found = true; }
+      } else if (typeof v === 'string' && v) {
+        out[k] = [v]; found = true;
+      }
+    }
+    return found ? out : null;
+  }
+  return null;
+}
+
+/**
+ * I-06: push backend field errors onto matching react-hook-form fields and
+ * return the leftover message for a toast / form-level alert. Call in every
+ * form catch block: `reportFormError(err, setError, push)` or with a
+ * `setServerError` fallback for non-RHF forms.
+ */
+export function reportFormError(
+  err: unknown,
+  opts: {
+    setError?: (name: string, error: { type: string; message: string }) => void;
+    setServerError?: (msg: string | null) => void;
+    push?: (kind: 'success' | 'error' | 'info', message: string) => void;
+  } = {},
+): string {
+  const message = formatApiError(err);
+  const fields = extractFieldErrors(err);
+  if (fields && opts.setError) {
+    for (const [field, msgs] of Object.entries(fields)) {
+      try {
+        opts.setError(field, { type: 'server', message: msgs.join(', ') });
+      } catch { /* unknown field name — falls through to the toast */ }
+    }
+  }
+  if (opts.setServerError) opts.setServerError(message);
+  if (opts.push) opts.push('error', message);
+  return message;
 }

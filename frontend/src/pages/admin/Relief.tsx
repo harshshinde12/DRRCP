@@ -3,12 +3,17 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, useToast, type Column } from '../../components/ui.tsx';
-import { apiSend } from '../../lib/api-client.ts';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
+import { apiSendOne } from '../../lib/api-client.ts';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import type { Allocation, InventoryRecord, ReliefItem, ResourceRequest } from '../../lib/types.ts';
 
-const itemSchema = z.object({ itemName: z.string().min(2).max(200), category: z.string().min(1), unit: z.string().min(1).max(30) });
+/** F-06: category mirrors the backend enum (was free text). */
+const itemSchema = z.object({
+  itemName: z.string().min(2).max(200),
+  category: z.enum(['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT']),
+  unit: z.string().min(1).max(30),
+});
 const stockSchema = z.object({ itemId: z.string().min(1), location: z.string().min(1).max(300), quantityAvailable: z.coerce.number().int().min(0) });
 const allocSchema = z.object({ resourceRequestId: z.string().min(1), inventoryId: z.string().min(1), quantity: z.coerce.number().int().min(1) });
 
@@ -42,10 +47,15 @@ export default function Relief() {
   const { push } = useToast();
   const invalidateAll = useInvalidateAll();
   const [modal, setModal] = useState<'item' | 'stock' | 'alloc' | null>(null);
-  const items = useReliefItems({ limit: 100 });
-  const inv = useInventory({ limit: 100 });
-  const reqs = useResourceRequests({ limit: 100 });
-  const allocs = useAllocations({ limit: 100 });
+  // F-04: real pagination state (was page={1} dead controls).
+  const [itemPage, setItemPage] = useState(1);
+  const [invPage, setInvPage] = useState(1);
+  const [reqPage, setReqPage] = useState(1);
+  const [allocPage, setAllocPage] = useState(1);
+  const items = useReliefItems({ page: itemPage, limit: 15 });
+  const inv = useInventory({ page: invPage, limit: 15 });
+  const reqs = useResourceRequests({ page: reqPage, limit: 15 });
+  const allocs = useAllocations({ page: allocPage, limit: 15 });
   const shortages = useShortages();
 
   const itemForm = useForm<z.infer<typeof itemSchema>>({ resolver: zodResolver(itemSchema) });
@@ -53,19 +63,19 @@ export default function Relief() {
   const allocForm = useForm<z.infer<typeof allocSchema>>({ resolver: zodResolver(allocSchema) });
 
   async function submitItem(data: z.infer<typeof itemSchema>) {
-    try { await apiSend('post', '/relief-items', data); push('success', 'Relief item registered.'); invalidateAll(); setModal(null); itemForm.reset(); }
-    catch (err) { push('error', formatApiError(err)); }
+    try { await apiSendOne('post', '/relief-items', 'item', data); push('success', 'Relief item registered.'); invalidateAll(); setModal(null); itemForm.reset(); }
+    catch (err) { reportFormError(err, { setError: itemForm.setError as never, push }); }
   }
   async function submitStock(data: z.infer<typeof stockSchema>) {
-    try { await apiSend('post', '/inventory', data); push('success', 'Stock registered.'); invalidateAll(); setModal(null); stockForm.reset(); }
-    catch (err) { push('error', formatApiError(err)); }
+    try { await apiSendOne('post', '/inventory', 'inventory', data); push('success', 'Stock registered.'); invalidateAll(); setModal(null); stockForm.reset(); }
+    catch (err) { reportFormError(err, { setError: stockForm.setError as never, push }); }
   }
   async function submitAlloc(data: z.infer<typeof allocSchema>) {
-    try { await apiSend('post', '/allocations', data); push('success', 'Stock allocated.'); invalidateAll(); setModal(null); allocForm.reset(); }
-    catch (err) { push('error', formatApiError(err)); }
+    try { await apiSendOne('post', '/allocations', 'allocation', data); push('success', 'Stock allocated.'); invalidateAll(); setModal(null); allocForm.reset(); }
+    catch (err) { reportFormError(err, { setError: allocForm.setError as never, push }); }
   }
   async function decide(id: string, kind: 'approve' | 'reject') {
-    try { await apiSend('post', `/resource-requests/${id}/${kind}`); push('success', `Request ${kind}d.`); invalidateAll(); }
+    try { await apiSendOne('post', `/resource-requests/${id}/${kind}`, 'resourceRequest'); push('success', `Request ${kind}d.`); invalidateAll(); }
     catch (err) { push('error', formatApiError(err)); }
   }
 
@@ -98,7 +108,7 @@ export default function Relief() {
             columns={[...reqCols, { key: 'act', header: 'Actions', render: (r) => r.status === 'PENDING' ? (
               <span className="flex gap-1.5"><Button size="sm" onClick={() => void decide(r.id, 'approve')}>Approve</Button><Button size="sm" variant="danger" onClick={() => void decide(r.id, 'reject')}>Reject</Button></span>
             ) : <span className="text-xs text-slate-400">fulfilled {r.quantityFulfilled}/{r.quantityRequired}</span> }]}
-            meta={reqs.data.meta} page={1} onPage={() => undefined} emptyTitle="No field requests"
+            meta={reqs.data.meta} page={reqPage} onPage={setReqPage} emptyTitle="No field requests"
           />
         )}
       </Card>
@@ -106,23 +116,23 @@ export default function Relief() {
       <div className="grid gap-3 lg:grid-cols-2">
         <Card>
           <CardTitle>Inventory</CardTitle>
-          {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={1} onPage={() => undefined} emptyTitle="No stock yet" />}
+          {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={invPage} onPage={setInvPage} emptyTitle="No stock yet" />}
         </Card>
         <Card>
           <CardTitle>Allocation history</CardTitle>
-          {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={1} onPage={() => undefined} emptyTitle="Nothing allocated yet" />}
+          {allocs.data && <DataTable rows={allocs.data.items} columns={allocCols} meta={allocs.data.meta} page={allocPage} onPage={setAllocPage} emptyTitle="Nothing allocated yet" />}
         </Card>
       </div>
 
       <Card>
         <CardTitle>Catalogue</CardTitle>
-        {items.data && <DataTable rows={items.data.items} columns={itemCols} meta={items.data.meta} page={1} onPage={() => undefined} emptyTitle="No items" />}
+        {items.data && <DataTable rows={items.data.items} columns={itemCols} meta={items.data.meta} page={itemPage} onPage={setItemPage} emptyTitle="No items" />}
       </Card>
 
       <Modal open={modal === 'item'} onClose={() => setModal(null)} title="Register relief item">
         <form onSubmit={itemForm.handleSubmit(submitItem)} className="space-y-3">
           <Field label="Item name" error={itemForm.formState.errors.itemName?.message}><Input {...itemForm.register('itemName')} /></Field>
-          <Field label="Category"><Select {...itemForm.register('category')}>{['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT'].map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
+          <Field label="Category" error={itemForm.formState.errors.category?.message}><Select {...itemForm.register('category')}>{['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT'].map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
           <Field label="Unit" error={itemForm.formState.errors.unit?.message}><Input placeholder="kg, litres, kits…" {...itemForm.register('unit')} /></Field>
           <Button type="submit" className="w-full">Save item</Button>
         </form>

@@ -5,15 +5,16 @@ import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { homeForRole, useAuth } from '../lib/auth.tsx';
 import { useMeta } from '../lib/meta.tsx';
-import { Button, Card, Field, Input, Select, Textarea, formatApiError } from '../components/ui.tsx';
+import { Button, Card, Field, Input, Select, Textarea, reportFormError } from '../components/ui.tsx';
 
 // Mirrors backend registerSchema (role constrained to public roles server-side too).
+// F-06: role is an enum of the backend PUBLIC_ROLES — never free text.
 const registerSchema = z.object({
   name: z.string().min(2, 'Name needs at least 2 characters').max(100),
   email: z.string().email('Enter a valid email').max(255),
   password: z.string().min(8, 'Minimum 8 characters').max(128),
   phone: z.string().max(20).optional().or(z.literal('')),
-  role: z.string().min(1, 'Pick a role'),
+  role: z.enum(['CITIZEN', 'VOLUNTEER', 'SHELTER_MANAGER', 'NGO']),
   address: z.string().max(500).optional().or(z.literal('')),
   skills: z.string().max(500).optional().or(z.literal('')),
   availability: z.string().max(100).optional().or(z.literal('')),
@@ -27,7 +28,7 @@ export default function Register() {
   const { options } = useMeta();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<RegisterInput>({
+  const { register, handleSubmit, watch, setError, formState: { errors, isSubmitting } } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
     defaultValues: { name: '', email: '', password: '', phone: '', role: 'CITIZEN', address: '', skills: '', availability: 'FULL_TIME', serviceArea: '', organizationName: '' },
   });
@@ -46,7 +47,7 @@ export default function Register() {
       const u = await doRegister(payload);
       navigate(homeForRole(u.role), { replace: true });
     } catch (err) {
-      setServerError(formatApiError(err));
+      reportFormError(err, { setError: setError as never, setServerError });
     }
   }
 

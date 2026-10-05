@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, EmptyState, EnumBadge, ErrorState, Skeleton, formatApiError, useToast } from '../components/ui.tsx';
 import { useMeta } from '../lib/meta.tsx';
-import { apiSend } from '../lib/api-client.ts';
+import { apiSend, apiSendOne } from '../lib/api-client.ts';
 import { useNotifications } from '../lib/queries.ts';
 
 export default function Notifications() {
@@ -26,7 +26,7 @@ export default function Notifications() {
 
   async function markOne(id: string) {
     try {
-      await apiSend('patch', `/notifications/${id}/read`);
+      await apiSendOne('patch', `/notifications/${id}/read`, 'notification');
       void qc.invalidateQueries({ queryKey: ['notifications'] });
       void qc.invalidateQueries({ queryKey: ['unread-count'] });
     } catch (err) {

@@ -164,6 +164,7 @@ test('shelter capacity block enforced, admin override audited', async ({ page, b
   await expect(dialog).toBeVisible();
   await dialog.getByLabel(/current occupancy/i).fill('205');
   await dialog.getByText(/emergency override/i).click();
+  await dialog.getByLabel(/override reason/i).fill('E2E flood surge, no alternate beds');
   await dialog.getByRole('button', { name: /^save$/i }).click();
   await expect(adminPage.getByText(/shelter updated/i)).toBeVisible({ timeout: 20_000 });
 

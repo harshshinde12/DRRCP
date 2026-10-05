@@ -2,6 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useState } from 'react';
 import { Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { Link } from 'react-router-dom';
 import { PRIORITY_DOT } from '../lib/meta.tsx';
 
 export const MUMBAI: [number, number] = [19.076, 72.8777];
@@ -37,7 +38,7 @@ export function RequestsMap({ requests, height = 420 }: { requests: MapRequest[]
         <Marker keyboard={false} key={r.id} position={[r.latitude as number, r.longitude as number]} icon={dot(PRIORITY_DOT[r.priority] ?? '#64748b')}>
           <Popup>
             <strong>{r.location}</strong><br />{r.displayStatus}<br />
-            <a href={`/admin/requests?focus=${r.id}`}>Open in queue</a>
+            <Link to={`/admin/requests?focus=${r.id}`}>Open in queue</Link>
           </Popup>
         </Marker>
       ))}

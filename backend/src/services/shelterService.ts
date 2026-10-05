@@ -67,6 +67,7 @@ export async function listShelters(query: Record<string, unknown>, viewer: Shelt
   const where = {
     ...(query.operatingStatus ? { operatingStatus: query.operatingStatus as string } : {}),
     ...(query.openOnly ? { operatingStatus: 'OPEN' } : {}),
+    ...(query.managerId ? { managerId: query.managerId as string } : {}),
     ...(query.facility ? { facilities: { contains: query.facility as string } } : {}),
     ...((query.search as string | undefined)?.trim()
       ? { OR: [{ name: { contains: query.search as string } }, { location: { contains: query.search as string } }] }
@@ -102,15 +103,28 @@ export async function updateShelter(actorId: string, actorRole: string, id: stri
   const totalCapacity = input.totalCapacity ?? shelter.totalCapacity;
   const currentOccupancy = input.currentOccupancy ?? shelter.currentOccupancy;
   const override = input.emergencyOverride ?? shelter.emergencyOverride;
-  if (currentOccupancy > totalCapacity && !override) {
+  const overrideReason = (input as { overrideReason?: string }).overrideReason?.trim();
+  const overCapacity = currentOccupancy > totalCapacity;
+  if (overCapacity && !override) {
     throw new HttpError(422, 'Occupancy cannot exceed total capacity without emergencyOverride:true (Shelter.Capacity.Block)');
   }
+  // I-04: over-capacity override needs a recorded reason (mirrors the team-override modal).
+  if (overCapacity && override && !overrideReason) {
+    throw new HttpError(422, 'An override reason (min 5 characters) is required when exceeding capacity.');
+  }
 
+  const { overrideReason: _dropped, ...persistable } = input as Record<string, unknown>;
   const updated = await prisma.shelter.update({
     where: { id },
-    data: { ...input, totalCapacity, currentOccupancy },
+    data: { ...persistable, totalCapacity, currentOccupancy } as never,
   });
-  await writeAuditLog({ actorId, action: 'SHELTER_UPDATE', target: 'Shelter', targetId: id, metadata: { occupancy: { from: shelter.currentOccupancy, to: currentOccupancy }, ...input } as Record<string, unknown> });
+  await writeAuditLog({
+    actorId,
+    action: overCapacity ? 'SHELTER_OVERRIDE' : 'SHELTER_UPDATE',
+    target: 'Shelter',
+    targetId: id,
+    metadata: { occupancy: { from: shelter.currentOccupancy, to: currentOccupancy }, ...persistable, ...(overrideReason ? { overrideReason } : {}) } as Record<string, unknown>,
+  });
 
   const enriched = withAvailability(updated);
   const freeFraction = enriched.totalCapacity === 0 ? 0 : enriched.availableCapacity / enriched.totalCapacity;

@@ -67,7 +67,7 @@ const NAV: Record<Role, NavItem[]> = {
   CITIZEN: [
     { to: '/my-requests', label: 'My requests', icon: '📋' },
     { to: '/request-help', label: 'Request help', icon: '🆘' },
-    { to: '/shelters', label: 'Nearby shelters', icon: '🏠' },
+    { to: '/nearby-shelters', label: 'Nearby shelters', icon: '🏠' },
     { to: '/notifications', label: 'Notifications', icon: '🔔' },
     { to: '/help', label: 'Help', icon: '❓' },
   ],

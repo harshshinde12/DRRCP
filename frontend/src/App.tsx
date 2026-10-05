@@ -53,6 +53,7 @@ const TITLES: Array<[RegExp, string]> = [
   [/^\/allocations/, 'Allocations · DRRCP'],
   [/^\/relief-requests/, 'Field requests · DRRCP'],
   [/^\/notifications/, 'Notifications · DRRCP'],
+  [/^\/nearby-shelters/, 'Find shelter · DRRCP'],
   [/^\/shelters/, 'Find shelter · DRRCP'],
   [/^\/help/, 'Help · DRRCP'],
   [/^\/login/, 'Log in · DRRCP'],
@@ -100,6 +101,8 @@ export default function App() {
             <Route path="/my-requests" element={<RequireRole roles={['CITIZEN']}><MyRequests /></RequireRole>} />
             <Route path="/my-requests/:id" element={<RequireRole roles={['CITIZEN']}><RequestDetail /></RequireRole>} />
             <Route path="/request-help" element={<RequireRole roles={['CITIZEN']}><NewRequest /></RequireRole>} />
+            {/* Nav quirk fix: citizen "Nearby shelters" keeps the AppShell (public /shelters stays for logged-out users). */}
+            <Route path="/nearby-shelters" element={<CitizenShelters />} />
 
             <Route path="/admin" element={<RequireRole roles={['ADMIN']}><AdminDashboard /></RequireRole>} />
             <Route path="/admin/requests" element={<RequireRole roles={['ADMIN']}><RequestQueue /></RequireRole>} />

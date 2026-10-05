@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { apiGet, getPaged } from '../lib/api-client.ts';
-import { useAuth } from '../lib/auth.tsx';
-import type { NotificationItem, Shelter } from '../lib/types.ts';
+import { getPaged } from '../lib/api-client.ts';
+import { homeForRole, useAuth } from '../lib/auth.tsx';
+import type { Shelter } from '../lib/types.ts';
 import { Card, CardSkeleton, StatCard } from '../components/ui.tsx';
 
 const HELPLINES = [
@@ -17,7 +17,8 @@ export default function Landing() {
   const sheltersQ = useQuery({ queryKey: ['public-shelters'], queryFn: () => getPaged<Shelter>('/shelters', { openOnly: true, limit: 100 }) });
   const alertsQ = useQuery({
     queryKey: ['public-alerts'],
-    queryFn: () => apiGet<NotificationItem[]>('/notifications', { params: { type: 'PUBLIC_ALERT', limit: 3 } } as never).catch(() => [] as NotificationItem[]),
+    // I-07: paginated envelope via getPaged (was `apiGet … as never`, discarding meta).
+    queryFn: () => getPaged<{ id: string; message: string }>('/notifications', { type: 'PUBLIC_ALERT', limit: 3 }).then((p) => p.items).catch(() => [] as Array<{ id: string; message: string }>),
     enabled: isAuthenticated,
     refetchInterval: 10_000,
   });
@@ -44,7 +45,7 @@ export default function Landing() {
         <h1 className="mt-2 max-w-2xl text-3xl font-extrabold leading-tight sm:text-5xl">Help finds you faster when everyone sees the same map.</h1>
         <p className="mt-3 max-w-xl text-brand-100">Citizens raise emergency requests, rescue teams get dispatched with one confirmation, shelters and relief stocks stay visible in real time.</p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link to={isAuthenticated ? (user?.role === 'CITIZEN' ? '/request-help' : '/notifications') : '/register'} className="rounded-lg bg-white px-5 py-2.5 font-bold text-brand-700 hover:bg-brand-50">
+          <Link to={isAuthenticated ? (user?.role === 'CITIZEN' ? '/request-help' : homeForRole(user!.role)) : '/register'} className="rounded-lg bg-white px-5 py-2.5 font-bold text-brand-700 hover:bg-brand-50">
             🆘 Request Emergency Help
           </Link>
           <Link to="/shelters" className="rounded-lg px-5 py-2.5 font-bold text-white ring-1 ring-white/60 hover:bg-white/10">Find a shelter</Link>

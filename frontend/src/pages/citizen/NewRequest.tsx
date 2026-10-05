@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 import { LocationPicker } from '../../components/Maps.tsx';
-import { Button, Card, Field, Input, Select, Textarea, formatApiError, useToast } from '../../components/ui.tsx';
+import { Button, Card, Field, Input, Select, Textarea, reportFormError, useToast } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
 import { useSubmitRequest } from '../../lib/queries.ts';
 
@@ -31,7 +31,7 @@ export default function NewRequest() {
   const [step, setStep] = useState(1);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const { register, handleSubmit, watch, setValue, trigger, formState: { errors } } = useForm<Form>({
+  const { register, handleSubmit, watch, setValue, setError, trigger, formState: { errors } } = useForm<Form>({
     resolver: zodResolver(schema),
     defaultValues: { emergencyType: '', peopleAffected: 1, injuryPresent: false, injurySeverity: 'UNKNOWN', location: '', latitude: null, longitude: null, description: '' },
   });
@@ -63,7 +63,7 @@ export default function NewRequest() {
       push('success', 'Emergency request submitted — authorities have been notified.');
       navigate(`/my-requests/${created.id}`);
     } catch (err) {
-      setServerError(formatApiError(err));
+      reportFormError(err, { setError: setError as never, setServerError, push });
     }
   }
 

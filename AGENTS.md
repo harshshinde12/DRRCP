@@ -74,7 +74,7 @@ se project/
     .env / .env.example   # VITE_API_URL
     src/main.tsx          # QueryClient + Router + Meta + Auth + Toast providers
     src/App.tsx           # role-guarded routes (RequireAuth/RequireRole), public landing/login/register/shelters
-    src/lib/api-client.ts # axios + JWT/401 interceptors, envelope unwrap (single-key objects collapse — see unread-count)
+    src/lib/api-client.ts # axios + JWT/401 interceptors, explicit typed envelopes (apiGetOne/apiSendOne per key; no collapsing)
     src/lib/types.ts      # API types (values mirror backend canonical sets)
     src/lib/meta.tsx      # MetaProvider: GET /api/meta → options()/label()/badgeClass(); PRIORITY_DOT hexes
     src/lib/auth.tsx      # AuthProvider (login/register/logout/me), homeForRole()
@@ -214,9 +214,9 @@ GET|PATCH /api/volunteers/:id (self or ADMIN)
 POST|GET /api/volunteer-tasks (skill-match + low-risk enforced → 422)  GET /api/volunteer-tasks/:id
 POST   /api/volunteer-tasks/:id/accept|decline  PATCH .../status
 # Shelters (list/nearby/:id PUBLIC per SE-2; writes: manager-owner or ADMIN)
-POST   /api/shelters  GET /api/shelters (status/facility/search/openOnly + availableCapacity)
+POST   /api/shelters  GET /api/shelters (status/facility/search/openOnly/managerId + availableCapacity)
 GET    /api/shelters/nearby?lat&lng&radiusKm (OPEN + beds, Haversine-sorted)
-GET|PATCH /api/shelters/:id (occupancy ≤ capacity unless emergencyOverride → 422)  DELETE ... (ADMIN)
+GET|PATCH /api/shelters/:id (occupancy ≤ capacity unless emergencyOverride + overrideReason → 422, audited)  DELETE ... (ADMIN)
 # Relief (items/inventory: NGO+ADMIN; requests: manager+ADMIN(+NGO read); allocations: ADMIN+NGO)
 POST|GET /api/relief-items  GET|PATCH|DELETE /api/relief-items/:id (delete: ADMIN)
 POST|GET /api/inventory  GET|PATCH /api/inventory/:id  GET /api/inventory/shortages

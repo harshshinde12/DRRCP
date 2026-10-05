@@ -24,6 +24,8 @@ export const updateShelterSchema = z.object({
   facilities: z.string().min(1).max(500).optional(),
   operatingStatus: z.enum(SHELTER_STATUSES).optional(),
   emergencyOverride: strictBoolean.optional(),
+  /** Mandatory when pushing occupancy above capacity with emergencyOverride:true — audited (mirrors team-override). */
+  overrideReason: z.string().min(5).max(500).optional(),
 });
 
 export const listSheltersQuery = z.object({
@@ -33,6 +35,7 @@ export const listSheltersQuery = z.object({
   facility: z.string().max(50).optional(),
   search: z.string().max(100).optional(),
   openOnly: strictBoolean.optional(),
+  managerId: z.string().min(1).max(50).optional(),
 });
 
 export const nearbySheltersQuery = z.object({

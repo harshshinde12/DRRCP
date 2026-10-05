@@ -41,6 +41,7 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
   const act = useRequestAction();
   const assign = useAssignTeam();
   const [verify, setVerify] = useState({ decision: 'VERIFIED', priority: 'HIGH', duplicateOfId: '' });
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [priority, setPriority] = useState('HIGH');
   const [teamId, setTeamId] = useState('');
   const [overrideTeam, setOverrideTeam] = useState<{ id: string; name: string } | null>(null);
@@ -51,6 +52,12 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
 
   async function doVerify() {
     if (!requestId) return;
+    // F-06: mirror backend 422 — DUPLICATE needs the original request link.
+    if (verify.decision === 'DUPLICATE' && !verify.duplicateOfId.trim()) {
+      setVerifyError('Original request ID is required when marking DUPLICATE.');
+      return;
+    }
+    setVerifyError(null);
     try {
       await act.mutateAsync({ id: requestId, kind: 'verify', body: { decision: verify.decision, priority: verify.priority, duplicateOfId: verify.duplicateOfId || undefined } });
       push('success', `Request ${verify.decision.toLowerCase()}.`);
@@ -103,7 +110,7 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
                     <Field label="Priority"><Select value={verify.priority} onChange={(e) => setVerify({ ...verify, priority: e.target.value })}>{options('priorities').map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</Select></Field>
                   </div>
                   {verify.decision === 'DUPLICATE' && (
-                    <div className="mt-2"><Field label="Original request ID"><Input value={verify.duplicateOfId} onChange={(e) => setVerify({ ...verify, duplicateOfId: e.target.value })} placeholder="Paste the original request ID" /></Field></div>
+                    <div className="mt-2"><Field label="Original request ID" error={verifyError ?? undefined}><Input value={verify.duplicateOfId} onChange={(e) => { setVerify({ ...verify, duplicateOfId: e.target.value }); setVerifyError(null); }} placeholder="Paste the original request ID" /></Field></div>
                   )}
                   <Button size="sm" className="mt-2" disabled={act.isPending} onClick={() => void doVerify()}>Apply decision</Button>
                 </section>

@@ -3,9 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, useToast, type Column } from '../../components/ui.tsx';
+import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { useMeta } from '../../lib/meta.tsx';
-import { apiSend } from '../../lib/api-client.ts';
+import { apiSendOne } from '../../lib/api-client.ts';
 import { useSuggestVolunteers, useVolunteerTasks } from '../../lib/queries.ts';
 import type { User, VolunteerTask } from '../../lib/types.ts';
 import { useUsers } from '../../lib/queries.ts';
@@ -35,18 +35,18 @@ function AssignTaskForm({ onDone }: { onDone: () => void }) {
   const { options } = useMeta();
   const qc = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
-  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<TaskInput>({ resolver: zodResolver(taskSchema), defaultValues: { volunteerId: '', title: '', taskType: '', location: '' } });
+  const { register, handleSubmit, watch, setValue, setError, formState: { errors, isSubmitting } } = useForm<TaskInput>({ resolver: zodResolver(taskSchema), defaultValues: { volunteerId: '', title: '', taskType: '', location: '' } });
   const taskType = watch('taskType');
   const location = watch('location');
   const suggest = useSuggestVolunteers(taskType || undefined, location || undefined);
   const mut = useMutation({
-    mutationFn: (body: TaskInput) => apiSend<VolunteerTask>('post', '/volunteer-tasks', body),
+    mutationFn: (body: TaskInput) => apiSendOne<VolunteerTask>('post', '/volunteer-tasks', 'task', body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['volunteer-tasks'] }),
   });
   async function onSubmit(data: TaskInput) {
     setServerError(null);
     try { await mut.mutateAsync(data); push('success', 'Task assigned.'); onDone(); }
-    catch (err) { setServerError(formatApiError(err)); }
+    catch (err) { reportFormError(err, { setError: setError as never, setServerError, push }); }
   }
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
