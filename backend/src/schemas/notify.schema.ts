@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { NOTIFICATION_TYPES } from '../utils/enums.js';
+import { strictBoolean } from './common.schema.js';
 import { RoleEnum } from './auth.schema.js';
 
 export const listNotificationsQuery = z.object({
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-  isRead: z.coerce.boolean().optional(),
+  isRead: strictBoolean.optional(),
   type: z.enum(NOTIFICATION_TYPES).optional(),
 });
 

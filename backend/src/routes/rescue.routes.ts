@@ -14,6 +14,7 @@ rescueRouter.post('/teams', auth, authorize('ADMIN'), asyncHandler(rescueControl
 rescueRouter.get('/teams', auth, authorize('ADMIN', 'RESCUE_TEAM'), asyncHandler(rescueController.listTeams));
 rescueRouter.get('/teams/:id', auth, authorize('ADMIN', 'RESCUE_TEAM'), asyncHandler(rescueController.getTeam));
 rescueRouter.patch('/teams/:id', auth, authorize('ADMIN'), asyncHandler(rescueController.updateTeam));
+rescueRouter.post('/teams/:id/availability', auth, authorize('ADMIN'), asyncHandler(rescueController.setAvailability));
 
 // Assignments
 rescueRouter.get('/assignments', auth, authorize('ADMIN', 'RESCUE_TEAM'), asyncHandler(rescueController.listAssignments));

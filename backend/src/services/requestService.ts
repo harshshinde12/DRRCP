@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { writeAuditLog } from '../utils/audit.js';
 import {
@@ -18,6 +19,11 @@ type CreateInput = z.infer<typeof createRequestSchema>;
 const REQUEST_SORTS = ['createdAt', 'updatedAt', 'priority', 'peopleAffected'] as const;
 
 type AssignmentLite = { id: string; status: string; teamId: string; assignedAt: Date };
+
+/** Prisma client or an interactive-transaction client — state writes accept either (BE-01/02/03). */
+export type DbClient = PrismaClient | Prisma.TransactionClient;
+
+type TransitionExtra = { priority?: Priority; duplicateOfId?: string; metadata?: Record<string, unknown> };
 
 export type ViewerCtx = { id: string; role: string; teamId: string | null };
 
@@ -69,22 +75,57 @@ export async function transitionRequest(
   to: RequestStatus,
   actorId: string,
   action: string,
-  extra: { priority?: Priority; duplicateOfId?: string; metadata?: Record<string, unknown> } = {},
+  extra: TransitionExtra = {},
 ) {
-  const current = await prisma.emergencyRequest.findUnique({ where: { id } });
+  const { from, updated, requesterId } = await applyRequestTransition(prisma, id, to, extra);
+  await logRequestTransition(actorId, id, requesterId, action, from, to, extra);
+  return updated;
+}
+
+/**
+ * Pure state change behind transitionRequest. Accepts a transaction client so
+ * multi-entity flows (assign / mission progress / report) can move the
+ * assignment, the team AND the request inside ONE database transaction
+ * (BE-01/02/03). Audit + notify stay with the caller (after commit).
+ */
+export async function applyRequestTransition(
+  db: DbClient,
+  id: string,
+  to: RequestStatus,
+  extra: TransitionExtra = {},
+) {
+  const current = await db.emergencyRequest.findUnique({ where: { id } });
   if (!current) throw new HttpError(404, 'Emergency request not found');
   const from = current.status as RequestStatus;
   assertRequestTransition(from, to);
 
-  const updated = await prisma.emergencyRequest.update({
-    where: { id },
+  // BE-15: conditional write on the observed state — a concurrent transition
+  // wins, the loser gets 409 instead of silently double-applying.
+  const applied = await db.emergencyRequest.updateMany({
+    where: { id, status: from },
     data: {
       status: to,
       ...(extra.priority ? { priority: extra.priority } : {}),
       ...(extra.duplicateOfId ? { duplicateOfId: extra.duplicateOfId } : {}),
     },
   });
+  if (applied.count === 0) {
+    throw new HttpError(409, `Request ${id} was modified concurrently (expected ${from}); please retry`);
+  }
+  const updated = await db.emergencyRequest.findUnique({ where: { id } });
+  return { from, updated: updated!, requesterId: current.requesterId };
+}
 
+/** Audit (FR-18) + citizen notify (FR-05) for a committed request transition. */
+export async function logRequestTransition(
+  actorId: string,
+  id: string,
+  requesterId: string,
+  action: string,
+  from: RequestStatus,
+  to: RequestStatus,
+  extra: TransitionExtra = {},
+) {
   await writeAuditLog({
     actorId,
     action,
@@ -93,11 +134,10 @@ export async function transitionRequest(
     metadata: { from, to, ...(extra.priority ? { priority: extra.priority } : {}), ...extra.metadata },
   });
   await notify(
-    current.requesterId,
+    requesterId,
     `Your emergency request is now ${to}${extra.priority ? ` (priority ${extra.priority})` : ''}.`,
     'REQUEST_UPDATE',
   );
-  return updated;
 }
 
 export async function submitRequest(citizenId: string, input: CreateInput) {
@@ -226,9 +266,15 @@ export async function verifyRequest(adminId: string, id: string, decision: Reque
   return transitionRequest(id, decision, adminId, 'REQUEST_VERIFY', { priority, duplicateOfId });
 }
 
+/** Admin priority change — rejected on terminal states (BE-05). */
+const TERMINAL_REQUEST_STATUSES: RequestStatus[] = ['RESOLVED', 'REJECTED', 'DUPLICATE', 'CANCELLED'];
+
 export async function setPriority(adminId: string, id: string, priority: Priority) {
   const request = await prisma.emergencyRequest.findUnique({ where: { id } });
   if (!request) throw new HttpError(404, 'Emergency request not found');
+  if ((TERMINAL_REQUEST_STATUSES as string[]).includes(request.status)) {
+    throw new HttpError(422, `Cannot change priority of a ${request.status} request`);
+  }
   const updated = await prisma.emergencyRequest.update({ where: { id }, data: { priority } });
   await writeAuditLog({
     actorId: adminId,

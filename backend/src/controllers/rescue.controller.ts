@@ -8,6 +8,7 @@ import {
   listTeamsQuery,
   reportSchema,
   supportSchema,
+  teamAvailabilitySchema,
   updateTeamSchema,
 } from '../schemas/rescue.schema.js';
 import * as rescueService from '../services/rescueService.js';
@@ -29,6 +30,12 @@ export async function getTeam(req: Request, res: Response) {
 
 export async function updateTeam(req: Request, res: Response) {
   const team = await rescueService.updateTeam(req.user!.id, req.params.id, updateTeamSchema.parse(req.body));
+  return ok(res, { team });
+}
+
+export async function setAvailability(req: Request, res: Response) {
+  const { availabilityStatus } = teamAvailabilitySchema.parse(req.body);
+  const team = await rescueService.setTeamAvailability(req.user!.id, req.params.id, availabilityStatus);
   return ok(res, { team });
 }
 

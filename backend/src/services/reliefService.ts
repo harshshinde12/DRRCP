@@ -197,7 +197,12 @@ async function progressResourceRequest(actorId: string, id: string, to: Resource
   if (!canTransitionResourceRequest(rr.status as ResourceRequestStatus, to)) {
     throw new HttpError(422, `Invalid resource-request transition: ${rr.status} → ${to}`);
   }
-  const updated = await prisma.resourceRequest.update({ where: { id }, data: { status: to } });
+  // BE-15: conditional write on the observed state — concurrent movers 409.
+  const applied = await prisma.resourceRequest.updateMany({ where: { id, status: rr.status }, data: { status: to } });
+  if (applied.count === 0) {
+    throw new HttpError(409, `Resource request ${id} was modified concurrently (expected ${rr.status}); please retry`);
+  }
+  const updated = await prisma.resourceRequest.findUnique({ where: { id } });
   await writeAuditLog({ actorId, action, target: 'ResourceRequest', targetId: id, metadata: { from: rr.status, to } });
   await notify(rr.requesterId, `Your resource request is now ${to}.`, 'RESOURCE_UPDATE');
   return updated;
@@ -242,11 +247,22 @@ export async function createAllocation(actorId: string, resourceRequestId: strin
       data: { resourceRequestId, inventoryId, quantity, allocatedById: actorId, status: 'ALLOCATED' },
     });
     const fulfilled = rr.quantityFulfilled + quantity;
-    await tx.inventory.update({ where: { id: inventoryId }, data: { quantityAvailable: inv.quantityAvailable - quantity } });
-    await tx.resourceRequest.update({
-      where: { id: resourceRequestId },
+    // BE-15: conditional decrements — a concurrent allocator wins, the loser
+    // fails closed (409) instead of over-allocating stock or need.
+    const stock = await tx.inventory.updateMany({
+      where: { id: inventoryId, quantityAvailable: { gte: quantity } },
+      data: { quantityAvailable: { decrement: quantity } },
+    });
+    if (stock.count === 0) {
+      throw new HttpError(409, `Stock for ${inventoryId} changed concurrently; please retry`);
+    }
+    const need = await tx.resourceRequest.updateMany({
+      where: { id: resourceRequestId, status: { in: ['APPROVED', 'PARTIALLY_FULFILLED'] }, quantityFulfilled: rr.quantityFulfilled },
       data: { quantityFulfilled: fulfilled, status: fulfilled >= rr.quantityRequired ? 'FULFILLED' : 'PARTIALLY_FULFILLED' },
     });
+    if (need.count === 0) {
+      throw new HttpError(409, `Resource request ${resourceRequestId} changed concurrently; please retry`);
+    }
     return allocation;
   });
   await writeAuditLog({ actorId, action: 'RESOURCE_ALLOCATE', target: 'ResourceAllocation', targetId: result.id, metadata: { resourceRequestId, inventoryId, quantity } });
@@ -290,7 +306,12 @@ export async function updateAllocationStatus(actorId: string, id: string, to: Al
     throw new HttpError(422, `Invalid allocation transition: ${allocation.status} → ${to}`);
   }
   const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.resourceAllocation.update({ where: { id }, data: { status: to } });
+    // BE-15: conditional on the observed state — concurrent status writers 409.
+    const moved = await tx.resourceAllocation.updateMany({ where: { id, status: allocation.status }, data: { status: to } });
+    if (moved.count === 0) {
+      throw new HttpError(409, `Allocation ${id} was modified concurrently (expected ${allocation.status}); please retry`);
+    }
+    const next = await tx.resourceAllocation.findUnique({ where: { id } });
     if (to === 'CANCELLED' && allocation.inventoryId) {
       // Restore stock + roll back fulfilled count (only pre-delivery cancellations reach here).
       const inv = await tx.inventory.findUnique({ where: { id: allocation.inventoryId } });

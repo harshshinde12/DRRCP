@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ALLOCATION_STATUSES, PRIORITIES, RESOURCE_REQUEST_STATUSES } from '../utils/enums.js';
+import { strictBoolean } from './common.schema.js';
 
 export const createItemSchema = z.object({
   itemName: z.string().min(2).max(200),
@@ -34,7 +35,7 @@ export const listInventoryQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   itemId: z.string().min(1).optional(),
   location: z.string().max(200).optional(),
-  lowStock: z.coerce.boolean().optional(),
+  lowStock: strictBoolean.optional(),
 });
 
 export const createResourceRequestSchema = z.object({

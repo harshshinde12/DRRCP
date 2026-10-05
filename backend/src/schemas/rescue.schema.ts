@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ASSIGNMENT_STATUSES, TEAM_AVAILABILITY } from '../utils/enums.js';
+import { strictBoolean } from './common.schema.js';
 
 export const createTeamSchema = z.object({
   name: z.string().min(2).max(100),
@@ -13,6 +14,8 @@ export const createTeamSchema = z.object({
 });
 
 export const updateTeamSchema = z.object({
+  // BE-06: availability is NOT patchable here — it moves only through the
+  // mission flow (or the audited POST /teams/:id/availability action).
   name: z.string().min(2).max(100).optional(),
   teamType: z.string().min(2).max(50).optional(),
   memberCount: z.coerce.number().int().min(1).max(1000).optional(),
@@ -20,7 +23,10 @@ export const updateTeamSchema = z.object({
   currentLocation: z.string().min(1).max(300).optional(),
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
-  availabilityStatus: z.enum(TEAM_AVAILABILITY).optional(),
+});
+
+export const teamAvailabilitySchema = z.object({
+  availabilityStatus: z.enum(TEAM_AVAILABILITY),
 });
 
 export const listTeamsQuery = z.object({
@@ -35,7 +41,7 @@ export const listTeamsQuery = z.object({
 export const assignTeamSchema = z.object({
   teamId: z.string().min(1),
   /** SRS Team.Assign.Block: assigning a non-AVAILABLE team needs an explicit, logged override. */
-  override: z.coerce.boolean().default(false),
+  override: strictBoolean.default(false),
   /** Mandatory when override:true — recorded in the audit trail. */
   overrideReason: z.string().min(5).max(500).optional(),
 });

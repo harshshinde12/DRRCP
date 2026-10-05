@@ -130,7 +130,12 @@ export async function progressTask(actorId: string, actorRole: string, id: strin
   if (!canTransitionVolunteerTask(task.status as VolunteerTaskStatus, to)) {
     throw new HttpError(422, `Invalid task transition: ${task.status} → ${to}`);
   }
-  const updated = await prisma.volunteerTask.update({ where: { id }, data: { status: to } });
+  // BE-15: conditional write on the observed state — concurrent movers 409.
+  const applied = await prisma.volunteerTask.updateMany({ where: { id, status: task.status }, data: { status: to } });
+  if (applied.count === 0) {
+    throw new HttpError(409, `Task ${id} was modified concurrently (expected ${task.status}); please retry`);
+  }
+  const updated = await prisma.volunteerTask.findUnique({ where: { id } });
   await writeAuditLog({ actorId, action, target: 'VolunteerTask', targetId: id, metadata: { from: task.status, to } });
   return updated;
 }

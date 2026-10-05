@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EMERGENCY_TYPES, PRIORITIES, REQUEST_STATUSES } from '../utils/enums.js';
+import { strictBoolean } from './common.schema.js';
 
 export const createRequestSchema = z.object({
   emergencyType: z.enum(EMERGENCY_TYPES),
@@ -8,7 +9,7 @@ export const createRequestSchema = z.object({
   latitude: z.coerce.number().min(-90).max(90).optional(),
   longitude: z.coerce.number().min(-180).max(180).optional(),
   peopleAffected: z.coerce.number().int().min(1).max(100000),
-  injuryPresent: z.coerce.boolean().default(false),
+  injuryPresent: strictBoolean.default(false),
   injurySeverity: z.enum(['NONE', 'MINOR', 'MODERATE', 'SEVERE', 'UNKNOWN']).optional(),
   disasterId: z.string().min(1).optional(),
 });

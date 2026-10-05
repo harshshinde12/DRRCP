@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SHELTER_STATUSES } from '../utils/enums.js';
+import { strictBoolean } from './common.schema.js';
 
 export const createShelterSchema = z.object({
   name: z.string().min(2).max(200),
@@ -22,7 +23,7 @@ export const updateShelterSchema = z.object({
   currentOccupancy: z.coerce.number().int().min(0).max(100000).optional(),
   facilities: z.string().min(1).max(500).optional(),
   operatingStatus: z.enum(SHELTER_STATUSES).optional(),
-  emergencyOverride: z.coerce.boolean().optional(),
+  emergencyOverride: strictBoolean.optional(),
 });
 
 export const listSheltersQuery = z.object({
@@ -31,7 +32,7 @@ export const listSheltersQuery = z.object({
   operatingStatus: z.enum(SHELTER_STATUSES).optional(),
   facility: z.string().max(50).optional(),
   search: z.string().max(100).optional(),
-  openOnly: z.coerce.boolean().optional(),
+  openOnly: strictBoolean.optional(),
 });
 
 export const nearbySheltersQuery = z.object({

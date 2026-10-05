@@ -173,7 +173,14 @@ export const openApiSpec = {
     },
     '/teams/{id}': {
       get: op('Get team', ['Rescue'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),
-      patch: op('Update team (availability, location…)', ['Rescue'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),
+      patch: op('Update team location/capability (availability moves only via mission flow or availability action)', ['Rescue'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),
+    },
+    '/teams/{id}/availability': {
+      post: op('Admin marks team AVAILABLE (audited; 409 while active assignments exist)', ['Rescue'], {
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['availabilityStatus'], properties: { availabilityStatus: { type: 'string', enum: ['AVAILABLE'] } } } } } },
+        responses: { '200': { description: 'ok' }, '409': err('active assignments') },
+      }),
     },
     '/assignments': {
       get: op('List assignments (teams: own only)', ['Rescue'], { parameters: [...pageParams, { name: 'status', in: 'query', schema: { type: 'string' } }, { name: 'teamId', in: 'query', schema: { type: 'string' } }, { name: 'requestId', in: 'query', schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),

@@ -200,7 +200,8 @@ PATCH  /api/requests/:id/priority (ADMIN)
 # Request detail/list also return missionStatus (latest assignment) + displayStatus (citizen label, derived only).
 # Privacy (SE-5): requester phone + exact lat/lng visible ONLY to ADMIN, owner, assigned team (else null).
 # Rescue (ADMIN dispatch; RESCUE_TEAM missions)
-POST|GET /api/teams  GET|PATCH /api/teams/:id
+POST|GET /api/teams  GET|PATCH /api/teams/:id (no availabilityStatus — location/capability only)
+POST   /api/teams/:id/availability {AVAILABLE} (ADMIN, audited; 409 while active assignments)
 GET    /api/requests/:id/matching-teams (AVAILABLE ranked by capability+distance)
 POST   /api/requests/:id/assign { teamId, override?, overrideReason? } (non-AVAILABLE → 409 unless override + reason, logged)
 GET    /api/assignments (teams: own only)  GET /api/assignments/:id

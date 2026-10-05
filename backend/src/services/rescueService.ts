@@ -11,7 +11,7 @@ import { HttpError } from '../utils/httpErrors.js';
 import { notify, notifyAdmins } from '../utils/notify.js';
 import { pageMeta, parsePagination } from '../utils/pagination.js';
 import { createTeamSchema, updateTeamSchema } from '../schemas/rescue.schema.js';
-import { decorateRequest, transitionRequest, viewerContext } from './requestService.js';
+import { applyRequestTransition, decorateRequest, logRequestTransition, viewerContext } from './requestService.js';
 
 type CreateTeamInput = z.infer<typeof createTeamSchema>;
 type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
@@ -74,6 +74,28 @@ export async function updateTeam(actorId: string, id: string, input: UpdateTeamI
   return team;
 }
 
+/**
+ * BE-06: audited admin action to return a team to AVAILABLE. Mission states
+ * (ASSIGNED/ON_THE_WAY/RESCUE_IN_PROGRESS) move only through the mission
+ * flow — never here. Marking AVAILABLE while active assignments exist is
+ * rejected (409), so dispatch state can never be faked.
+ */
+export async function setTeamAvailability(adminId: string, id: string, status: TeamAvailability) {
+  if (status !== 'AVAILABLE') {
+    throw new HttpError(422, 'Only AVAILABLE is supported here; mission states change through the mission flow');
+  }
+  const team = await getTeam(id);
+  const active = await prisma.rescueAssignment.count({
+    where: { teamId: id, status: { in: [...ACTIVE_ASSIGNMENT] } },
+  });
+  if (active > 0) {
+    throw new HttpError(409, `Team ${team.name} has ${active} active assignment(s); cannot mark AVAILABLE until missions complete`);
+  }
+  const updated = await prisma.rescueTeam.update({ where: { id }, data: { availabilityStatus: 'AVAILABLE' } });
+  await writeAuditLog({ actorId: adminId, action: 'TEAM_AVAILABILITY', target: 'RescueTeam', targetId: id, metadata: { from: team.availabilityStatus, to: 'AVAILABLE' } });
+  return updated;
+}
+
 /** Team.Match: AVAILABLE teams for a request, ranked by capability overlap then distance. */
 export async function matchingTeams(requestId: string) {
   const request = await prisma.emergencyRequest.findUnique({ where: { id: requestId } });
@@ -117,17 +139,21 @@ export async function assignTeam(adminId: string, requestId: string, teamId: str
   }
 
   const firstAssignment = request.status === 'VERIFIED';
-  const assignment = await prisma.$transaction(async (tx) => {
+  // BE-01: assignment + team mirror + request transition commit atomically —
+  // a failed request transition can no longer orphan an ASSIGNED assignment.
+  const { assignment, transition } = await prisma.$transaction(async (tx) => {
     const created = await tx.rescueAssignment.create({
       data: { requestId, teamId, assignedById: adminId, status: 'ASSIGNED' },
       include: { team: true },
     });
     await tx.rescueTeam.update({ where: { id: teamId }, data: { availabilityStatus: 'ASSIGNED' } });
-    return created;
+    const extra = { metadata: { teamId, team: team.name, override, ...(overrideReason ? { overrideReason } : {}) } };
+    const moved = firstAssignment ? await applyRequestTransition(tx, requestId, 'ASSIGNED', extra) : null;
+    return { assignment: created, transition: moved ? { ...moved, extra } : null };
   });
 
-  if (firstAssignment) {
-    await transitionRequest(requestId, 'ASSIGNED', adminId, 'TEAM_ASSIGN', { metadata: { teamId, team: team.name, override, ...(overrideReason ? { overrideReason } : {}) } });
+  if (transition) {
+    await logRequestTransition(adminId, requestId, transition.requesterId, 'TEAM_ASSIGN', transition.from, 'ASSIGNED', transition.extra);
   } else {
     // Additional support on an already-active request (SRS allows multiple teams).
     await writeAuditLog({ actorId: adminId, action: 'TEAM_ASSIGN', target: 'RescueAssignment', targetId: assignment.id, metadata: { requestId, teamId, team: team.name, override, additionalSupport: true, ...(overrideReason ? { overrideReason } : {}) } });
@@ -207,20 +233,28 @@ async function progressAssignment(actorId: string, id: string, to: AssignmentSta
   if (!canTransitionAssignment(assignment.status as AssignmentStatus, to)) {
     throw new HttpError(422, `Invalid assignment transition: ${assignment.status} → ${to}`);
   }
-  const updated = await prisma.$transaction(async (tx) => {
-    const next = await tx.rescueAssignment.update({
-      where: { id },
+  // BE-02: mission + team mirror + request transition commit atomically.
+  const driveRequest = to === 'RESCUE_IN_PROGRESS' && assignment.request.status === 'ASSIGNED';
+  const { updated, transition } = await prisma.$transaction(async (tx) => {
+    const moved = await tx.rescueAssignment.updateMany({
+      where: { id, status: assignment.status },
       data: { status: to, ...(to === 'COMPLETED' || to === 'CANCELLED' ? { completedAt: new Date() } : {}) },
     });
+    if (moved.count === 0) {
+      throw new HttpError(409, `Assignment ${id} was modified concurrently (expected ${assignment.status}); please retry`);
+    }
     const mirror = TEAM_MIRROR[to];
     if (mirror) await tx.rescueTeam.update({ where: { id: assignment.teamId }, data: { availabilityStatus: mirror } });
-    return next;
+    // Mission underway ⇒ request becomes RESCUE_IN_PROGRESS (drives citizen tracking).
+    const reqMoved = driveRequest
+      ? await applyRequestTransition(tx, assignment.requestId, 'RESCUE_IN_PROGRESS', { metadata: { assignmentId: id } })
+      : null;
+    const next = await tx.rescueAssignment.findUnique({ where: { id } });
+    return { updated: next!, transition: reqMoved };
   });
   await writeAuditLog({ actorId, action, target: 'RescueAssignment', targetId: id, metadata: { from: assignment.status, to } });
-
-  // Mission underway ⇒ request becomes RESCUE_IN_PROGRESS (drives citizen tracking).
-  if (to === 'RESCUE_IN_PROGRESS' && assignment.request.status === 'ASSIGNED') {
-    await transitionRequest(assignment.requestId, 'RESCUE_IN_PROGRESS', actorId, 'MISSION_PROGRESS', { metadata: { assignmentId: id } });
+  if (transition) {
+    await logRequestTransition(actorId, assignment.requestId, transition.requesterId, 'MISSION_PROGRESS', transition.from, 'RESCUE_IN_PROGRESS', { metadata: { assignmentId: id } });
   }
   return updated;
 }
@@ -259,17 +293,32 @@ export async function submitReport(teamUserId: string, id: string, input: { peop
   if (assignment.status !== 'RESCUE_IN_PROGRESS') {
     throw new HttpError(422, `Report requires mission RESCUE_IN_PROGRESS (now ${assignment.status})`);
   }
+  // BE-03: validate the request state BEFORE writing — a COMPLETED report must
+  // never exist with an unresolved request (stale ASSIGNED ⇒ 422, no orphan).
+  if (assignment.request.status !== 'RESCUE_IN_PROGRESS') {
+    throw new HttpError(422, `Report requires request RESCUE_IN_PROGRESS (now ${assignment.request.status}); progress the mission first`);
+  }
 
-  const result = await prisma.$transaction(async (tx) => {
+  // Single transaction: report + COMPLETED + AVAILABLE + RESOLVED (the ONLY
+  // path to RESOLVED). The in-txn transition re-validates, so even a race
+  // between the pre-check and the write cannot orphan a COMPLETED report.
+  const { result, transition } = await prisma.$transaction(async (tx) => {
     const report = await tx.rescueReport.create({
       data: { assignmentId: id, peopleRescued: input.peopleRescued, injuredPeople: input.injuredPeople, notes: input.notes },
     });
-    await tx.rescueAssignment.update({ where: { id }, data: { status: 'COMPLETED', completedAt: new Date() } });
+    const moved = await tx.rescueAssignment.updateMany({
+      where: { id, status: 'RESCUE_IN_PROGRESS' },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    if (moved.count === 0) {
+      throw new HttpError(409, `Assignment ${id} was modified concurrently; please retry`);
+    }
     await tx.rescueTeam.update({ where: { id: assignment.teamId }, data: { availabilityStatus: 'AVAILABLE' } });
-    return report;
+    const reqMoved = await applyRequestTransition(tx, assignment.requestId, 'RESOLVED', { metadata: { assignmentId: id, reportId: report.id } });
+    return { result: report, transition: reqMoved };
   });
   await writeAuditLog({ actorId: teamUserId, action: 'RESCUE_REPORT', target: 'RescueReport', targetId: result.id, metadata: { assignmentId: id, ...input } });
-  await transitionRequest(assignment.requestId, 'RESOLVED', teamUserId, 'REQUEST_RESOLVE', { metadata: { assignmentId: id, reportId: result.id } });
+  await logRequestTransition(teamUserId, assignment.requestId, transition.requesterId, 'REQUEST_RESOLVE', transition.from, 'RESOLVED', { metadata: { assignmentId: id, reportId: result.id } });
   return result;
 }
 
