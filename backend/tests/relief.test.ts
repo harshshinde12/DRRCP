@@ -2,6 +2,7 @@ import type { Express } from 'express';
 import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { openApiSpec } from '../src/docs/openapi.js';
 import { prisma } from './helpers.js';
 import { bearer, cleanDb, seedBase, tokenFor, type Fixture } from './helpers.js';
 
@@ -166,5 +167,33 @@ describe('cross-module RBAC + public surface', () => {
     const inbox = await request(app).get('/api/notifications?limit=5').set(bearer(tok.citizen));
     expect(inbox.body.meta.total).toBeGreaterThan(0);
     expect(inbox.body.meta.page).toBe(1);
+  });
+});
+
+describe('allocations status contract (BE-10/D-02)', () => {
+  it('OpenAPI documents PATCH /allocations/{id}/status (not bare /allocations/{id})', () => {
+    const paths = openApiSpec.paths as Record<string, Record<string, unknown>>;
+    expect(paths['/allocations/{id}/status']?.patch).toBeDefined();
+    expect(paths['/allocations/{id}']?.get).toBeDefined();
+    expect(paths['/allocations/{id}']?.patch).toBeUndefined();
+  });
+
+  it('PATCH /allocations/:id 404s; PATCH /allocations/:id/status updates', async () => {
+    const rr = await request(app).post('/api/resource-requests').set(bearer(tok.manager)).send({
+      shelterId: fx.shelter.id, itemId: fx.item.id, quantityRequired: 100, priority: 'HIGH',
+    });
+    expect(rr.status).toBe(201);
+    const rrId = rr.body.data.resourceRequest.id as string;
+    expect((await request(app).post(`/api/resource-requests/${rrId}/approve`).set(bearer(tok.admin))).status).toBe(200);
+    const al = await request(app).post('/api/allocations').set(bearer(tok.admin)).send({
+      resourceRequestId: rrId, inventoryId: fx.inventory.id, quantity: 40,
+    });
+    expect(al.status).toBe(201);
+    const allocId = al.body.data.allocation.id as string;
+
+    expect((await request(app).patch(`/api/allocations/${allocId}`).set(bearer(tok.admin)).send({ status: 'IN_TRANSIT' })).status).toBe(404);
+    const okRes = await request(app).patch(`/api/allocations/${allocId}/status`).set(bearer(tok.admin)).send({ status: 'IN_TRANSIT' });
+    expect(okRes.status).toBe(200);
+    expect(okRes.body.data.allocation.status).toBe('IN_TRANSIT');
   });
 });

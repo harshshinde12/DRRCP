@@ -100,3 +100,4 @@ service (unit-tested in `requestTransitions.test.ts`).
 6. **CO-2 engine** — SRS names MySQL/PostgreSQL; build uses SQLite file DB with portable ORM code (one-line provider swap). Accepted for academic scope.
 7. **Browsers** — E2E runs Chromium; Firefox/WebKit not in CI (Playwright projects ready to add).
 8. **Availability 99%** — single instance; no standby. Fine for Release 1.0 demo scope.
+9. **npm audit (B-02, Oct 2026)** — `npm audit fix` (no `--force`) leaves 7 vulnerabilities (1 moderate `esbuild<=0.24.2` GHSA-67mh-4wv8-2f99 via `vite`, 6 high `braces` GHSA-vfj7-8cjw-p6xm via `tailwindcss/chokidar`); non-breaking fix changes nothing. Breaking fixes (`tailwindcss@4`, `vite@8`) deferred to a separate branch — Tailwind v3 / Vite v5 majors kept. Accepted risk: both are dev-time-only (local dev server, build-time glob); no production runtime exposure in Release 1.0.

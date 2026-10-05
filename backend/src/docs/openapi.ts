@@ -314,6 +314,8 @@ export const openApiSpec = {
     },
     '/allocations/{id}': {
       get: op('Get allocation', ['Relief'], { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'ok' } } }),
+    },
+    '/allocations/{id}/status': {
       patch: op('Update allocation status (cancel restores stock)', ['Relief'], {
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         requestBody: { content: { 'application/json': { schema: { type: 'object', required: ['status'], properties: { status: { type: 'string' } } } } } },

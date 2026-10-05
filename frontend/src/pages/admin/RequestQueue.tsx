@@ -205,17 +205,15 @@ export default function RequestQueue() {
       {q.isLoading && <p className="text-sm text-slate-400">Loading queue…</p>}
       {q.isError && <ErrorState message="Could not load the queue." onRetry={() => void q.refetch()} />}
       {q.data && (
-        <div onClick={(e) => {
-          const tr = (e.target as HTMLElement).closest('tr');
-          // row click opens drawer (ignore button/link clicks)
-          if (tr && !(e.target as HTMLElement).closest('button,a')) {
-            const idx = [...tr.parentElement!.children].indexOf(tr);
-            const row = rows[idx];
-            if (row) { setFocus(row.id); setParams((p) => { p.set('focus', row.id); return p; }, { replace: true }); }
-          }
-        }}>
-          <DataTable rows={rows} columns={columns} meta={q.data.meta} page={page} onPage={setPage} emptyTitle="Queue is clear 🎉" />
-        </div>
+        <DataTable
+          rows={rows}
+          columns={columns}
+          meta={q.data.meta}
+          page={page}
+          onPage={setPage}
+          emptyTitle="Queue is clear 🎉"
+          onRowClick={(row) => { setFocus(row.id); setParams((p) => { p.set('focus', row.id); return p; }, { replace: true }); }}
+        />
       )}
       <TriageDrawer requestId={focus} onClose={() => { setFocus(null); setParams((p) => { p.delete('focus'); return p; }, { replace: true }); }} />
     </div>

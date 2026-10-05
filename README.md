@@ -25,7 +25,7 @@ database and starts backend `:4000` + frontend `:5173`. Manual equivalent:
 npm install
 cp backend/.env.example backend/.env        # or: Copy-Item backend\.env.example backend\.env
 cp frontend/.env.example frontend/.env
-npx prisma migrate dev --workspace=backend  # creates backend/prisma/dev.db
+npm run prisma:migrate --workspace=backend  # creates backend/prisma/dev.db
 npm run seed:demo                            # clean, idempotent demo data
 npm run dev
 ```

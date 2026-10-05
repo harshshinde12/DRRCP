@@ -120,7 +120,7 @@ export default function Relief() {
       </Card>
 
       <Modal open={modal === 'item'} onClose={() => setModal(null)} title="Register relief item">
-        <form onSubmit={void itemForm.handleSubmit(submitItem)} className="space-y-3">
+        <form onSubmit={itemForm.handleSubmit(submitItem)} className="space-y-3">
           <Field label="Item name" error={itemForm.formState.errors.itemName?.message}><Input {...itemForm.register('itemName')} /></Field>
           <Field label="Category"><Select {...itemForm.register('category')}>{['FOOD', 'WATER', 'MEDICINE', 'CLOTHING', 'HYGIENE', 'EQUIPMENT'].map((c) => <option key={c} value={c}>{c}</option>)}</Select></Field>
           <Field label="Unit" error={itemForm.formState.errors.unit?.message}><Input placeholder="kg, litres, kits…" {...itemForm.register('unit')} /></Field>
@@ -129,7 +129,7 @@ export default function Relief() {
       </Modal>
 
       <Modal open={modal === 'stock'} onClose={() => setModal(null)} title="Register stock">
-        <form onSubmit={void stockForm.handleSubmit(submitStock)} className="space-y-3">
+        <form onSubmit={stockForm.handleSubmit(submitStock)} className="space-y-3">
           <Field label="Item" error={stockForm.formState.errors.itemId?.message}>
             <Select {...stockForm.register('itemId')}>
               <option value="">Pick…</option>
@@ -143,7 +143,7 @@ export default function Relief() {
       </Modal>
 
       <Modal open={modal === 'alloc'} onClose={() => setModal(null)} title="Allocate stock">
-        <form onSubmit={void allocForm.handleSubmit(submitAlloc)} className="space-y-3">
+        <form onSubmit={allocForm.handleSubmit(submitAlloc)} className="space-y-3">
           <Field label="Approved request" error={allocForm.formState.errors.resourceRequestId?.message}>
             <Select {...allocForm.register('resourceRequestId')}>
               <option value="">Pick…</option>

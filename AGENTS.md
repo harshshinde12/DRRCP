@@ -220,7 +220,7 @@ GET|PATCH /api/shelters/:id (occupancy ≤ capacity unless emergencyOverride →
 POST|GET /api/relief-items  GET|PATCH|DELETE /api/relief-items/:id (delete: ADMIN)
 POST|GET /api/inventory  GET|PATCH /api/inventory/:id  GET /api/inventory/shortages
 POST|GET /api/resource-requests  GET .../:id  POST .../:id/approve|reject|cancel
-POST|GET /api/allocations (atomic txn; over-stock/need → 422)  GET|PATCH /api/allocations/:id[/status] (cancel restores stock)
+POST|GET /api/allocations (atomic txn; over-stock/need → 422)  GET /api/allocations/:id  PATCH /api/allocations/:id/status (cancel restores stock)
 # Notifications (all roles, own inbox) + dashboard/audit (ADMIN)
 GET    /api/notifications (isRead/type)  GET /api/notifications/unread-count
 PATCH  /api/notifications/:id/read  PATCH /api/notifications/read-all

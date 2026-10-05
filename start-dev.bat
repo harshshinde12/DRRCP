@@ -16,15 +16,11 @@ if errorlevel 1 (
 
 cd /d "%~dp0"
 
-if not exist "node_modules" (
-  echo [drrcp] Installing dependencies (first run, may take a few minutes)...
-  call npm install
-  if errorlevel 1 (
-    echo [drrcp] ERROR: npm install failed.
-    exit /b 1
-  )
-) else (
-  echo [drrcp] Dependencies present, skipping install.
+echo [drrcp] Installing dependencies (safe to re-run, ensures fresh deps)...
+call npm install
+if errorlevel 1 (
+  echo [drrcp] ERROR: npm install failed.
+  exit /b 1
 )
 
 if not exist "backend\.env" (
