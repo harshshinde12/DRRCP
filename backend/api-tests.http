@@ -1,0 +1,229 @@
+// DRRCP manual API walkthrough (VS Code REST Client / Thunder Client / Postman import).
+// Base: http://localhost:4000/api — or open Swagger UI at http://localhost:4000/api/docs
+// Run `npm run seed` first. Password for ALL seeded accounts: Password@123
+// After each login, copy the token into the matching @var below.
+
+@base = http://localhost:4000/api
+@adminTok = PASTE_ADMIN_TOKEN
+@citizenTok = PASTE_CITIZEN_TOKEN
+@teamTok = PASTE_TEAM_ALPHA_TOKEN
+@volTok = PASTE_VOLUNTEER1_TOKEN
+@mgrTok = PASTE_SHELTER_MANAGER_TOKEN
+@ngoTok = PASTE_NGO1_TOKEN
+
+### 0a. Health
+GET {{base}}/health
+
+### 0b. Login as admin
+# @name adminLogin
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@drrcp.local", "password": "Password@123" }
+
+### 0c. Registration lockdown: ADMIN must be 403
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "name": "Sneaky", "email": "sneaky@t.local", "password": "Password@123", "role": "ADMIN" }
+
+### 0d. Admin provisions a rescue-team login + team record
+POST {{base}}/admin/users
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{
+  "name": "Delta Team", "email": "delta@drrcp.local", "password": "Password@123", "role": "RESCUE_TEAM",
+  "team": { "name": "Delta Unit", "teamType": "MEDICAL", "memberCount": 5, "capability": "TRIAGE", "currentLocation": "Depot", "latitude": 19.0, "longitude": 72.8 }
+}
+
+### 1a. Active disaster
+GET {{base}}/disasters/active
+Authorization: Bearer {{adminTok}}
+
+### 1b. Create a disaster
+POST {{base}}/disasters
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "name": "Thane Landslide 2026", "type": "LANDSLIDE", "affectedArea": "Thane hills", "severity": "MODERATE", "startDate": "2026-08-01T00:00:00Z" }
+
+### 2a. Citizen submits an emergency request (auto-links active disaster)
+# @name submit
+POST {{base}}/requests
+Authorization: Bearer {{citizenTok}}
+Content-Type: application/json
+
+{
+  "emergencyType": "RESCUE",
+  "description": "Family stranded on rooftop in flood water",
+  "location": "Andheri West",
+  "latitude": 19.13, "longitude": 72.82,
+  "peopleAffected": 4, "injuryPresent": false
+}
+
+### 2b. Citizen lists own requests (paginated)
+GET {{base}}/requests?page=1&limit=10
+Authorization: Bearer {{citizenTok}}
+
+### 2c. Admin verifies with priority  → SUBMITTED → VERIFIED
+# copy id from @submit response into REQ below
+@req = PASTE_REQUEST_ID
+POST {{base}}/requests/{{req}}/verify
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "decision": "VERIFIED", "priority": "CRITICAL" }
+
+### 2d. Rank available teams for the request
+GET {{base}}/requests/{{req}}/matching-teams
+Authorization: Bearer {{adminTok}}
+
+### 3a. Assign an AVAILABLE team  → VERIFIED → ASSIGNED
+@team = PASTE_TEAM_ID
+POST {{base}}/requests/{{req}}/assign
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "teamId": "{{team}}" }
+
+### 3b. Re-assigning the same busy team is 409…
+POST {{base}}/requests/{{req}}/assign
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "teamId": "{{team}}" }
+
+### 3c. …unless overridden (additional support, logged)
+POST {{base}}/requests/{{req}}/assign
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "teamId": "{{team}}", "override": true }
+
+### 3d. Team acknowledges  → ASSIGNED → ACKNOWLEDGED
+@asg = PASTE_ASSIGNMENT_ID
+POST {{base}}/assignments/{{asg}}/acknowledge
+Authorization: Bearer {{teamTok}}
+
+### 3e. Team on the way  → ACKNOWLEDGED → ON_THE_WAY
+PATCH {{base}}/assignments/{{asg}}/status
+Authorization: Bearer {{teamTok}}
+Content-Type: application/json
+
+{ "status": "ON_THE_WAY" }
+
+### 3f. Mission in progress  → request becomes RESCUE_IN_PROGRESS
+PATCH {{base}}/assignments/{{asg}}/status
+Authorization: Bearer {{teamTok}}
+Content-Type: application/json
+
+{ "status": "RESCUE_IN_PROGRESS" }
+
+### 3g. Rescue unsuccessful → request additional support (admins alerted)
+POST {{base}}/assignments/{{asg}}/request-support
+Authorization: Bearer {{teamTok}}
+Content-Type: application/json
+
+{ "notes": "Need a second boat, water rising" }
+
+### 3h. File rescue report  → COMPLETED + request RESOLVED (only path to RESOLVED)
+POST {{base}}/assignments/{{asg}}/report
+Authorization: Bearer {{teamTok}}
+Content-Type: application/json
+
+{ "peopleRescued": 4, "injuredPeople": 0, "notes": "All safe" }
+
+### 3i. Request history (audit trail)
+GET {{base}}/requests/{{req}}/history
+Authorization: Bearer {{citizenTok}}
+
+### 4a. Suggest volunteers by skill + area
+GET {{base}}/volunteers/suggest?taskType=FIRST_AID&location=Andheri%20camp
+Authorization: Bearer {{adminTok}}
+
+### 4b. Assign a volunteer task (skill match enforced)
+POST {{base}}/volunteer-tasks
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "volunteerId": "PASTE_VOLUNTEER_ID", "title": "First-aid post", "taskType": "FIRST_AID", "location": "Andheri camp" }
+
+### 4c/4d. Volunteer accepts, then progresses
+@vtask = PASTE_TASK_ID
+POST {{base}}/volunteer-tasks/{{vtask}}/accept
+Authorization: Bearer {{volTok}}
+
+### 4e
+PATCH {{base}}/volunteer-tasks/{{vtask}}/status
+Authorization: Bearer {{volTok}}
+Content-Type: application/json
+
+{ "status": "IN_PROGRESS" }
+
+### 5a. Nearby shelters (public, no token)
+GET {{base}}/shelters/nearby?lat=19.13&lng=72.82&radiusKm=50
+
+### 5b. Update occupancy (blocked past capacity unless emergencyOverride)
+PATCH {{base}}/shelters/PASTE_SHELTER_ID
+Authorization: Bearer {{mgrTok}}
+Content-Type: application/json
+
+{ "currentOccupancy": 95 }
+
+### 6a. NGO registers stock
+POST {{base}}/inventory
+Authorization: Bearer {{ngoTok}}
+Content-Type: application/json
+
+{ "itemId": "PASTE_ITEM_ID", "location": "Depot", "quantityAvailable": 1000 }
+
+### 6b. Manager raises a resource request
+POST {{base}}/resource-requests
+Authorization: Bearer {{mgrTok}}
+Content-Type: application/json
+
+{ "shelterId": "PASTE_SHELTER_ID", "itemId": "PASTE_ITEM_ID", "quantityRequired": 400, "priority": "HIGH" }
+
+### 6c. NGO approves, then allocates (atomic; over-allocation → 422)
+@rr = PASTE_RESOURCE_REQUEST_ID
+POST {{base}}/resource-requests/{{rr}}/approve
+Authorization: Bearer {{ngoTok}}
+
+### 6d
+POST {{base}}/allocations
+Authorization: Bearer {{ngoTok}}
+Content-Type: application/json
+
+{ "resourceRequestId": "{{rr}}", "inventoryId": "PASTE_INVENTORY_ID", "quantity": 150 }
+
+### 6e. Shortage report
+GET {{base}}/inventory/shortages
+Authorization: Bearer {{adminTok}}
+
+### 7a. My notifications + unread count
+GET {{base}}/notifications?limit=5
+Authorization: Bearer {{citizenTok}}
+
+### 7b
+GET {{base}}/notifications/unread-count
+Authorization: Bearer {{citizenTok}}
+
+### 7c. Broadcast a public alert
+POST {{base}}/alerts/broadcast
+Authorization: Bearer {{adminTok}}
+Content-Type: application/json
+
+{ "message": "Heavy rain warning for tonight" }
+
+### 8a. Dashboard summary
+GET {{base}}/dashboard/summary
+Authorization: Bearer {{adminTok}}
+
+### 8b. Time series for charts
+GET {{base}}/dashboard/timeseries?days=14
+Authorization: Bearer {{adminTok}}
+
+### 8c. Audit trail
+GET {{base}}/audit-logs?action=TEAM_ASSIGN&limit=10
+Authorization: Bearer {{adminTok}}

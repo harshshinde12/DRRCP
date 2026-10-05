@@ -1,0 +1,26 @@
+{
+  "name": "drrcp-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Disaster Relief & Rescue Coordination Platform (DRRCP) — monorepo",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=backend && npm run build --workspace=frontend",
+    "seed": "npm run seed --workspace=backend",
+    "seed:demo": "npm run seed --workspace=backend",
+    "test:e2e": "npm run test --workspace=e2e",
+    "prisma:generate": "npm run prisma:generate --workspace=backend",
+    "prisma:migrate": "npm run prisma:migrate --workspace=backend",
+    "install:all": "npm install && npm install --workspace=backend && npm install --workspace=frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "workspaces": [
+    "backend",
+    "frontend",
+    "e2e"
+  ]
+}

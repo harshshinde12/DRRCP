@@ -1,0 +1,291 @@
+// DRRCP — Prisma schema derived from SRS Appendix A + Class Diagram.
+// SQLite for local/dev (Release 1.0 academic scope).
+// NOTE: The SQLite connector does not support native enums, so all enum-like
+// fields are stored as String. The canonical value sets live in
+// src/utils/enums.ts (TS const objects + union types) and are enforced via
+// Zod schemas at the API boundary. Postgres migration: change String → enum.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Canonical value sets (mirrored in src/utils/enums.ts) ──
+// Role: CITIZEN | VOLUNTEER | RESCUE_TEAM | SHELTER_MANAGER | NGO | ADMIN
+// DisasterStatus: ACTIVE | MONITORING | RESOLVED
+// EmergencyType: RESCUE | MEDICAL | FOOD | WATER | SHELTER | FIRE | MISSING_PERSON | INFRASTRUCTURE
+// Priority: CRITICAL | HIGH | MEDIUM | LOW
+// RequestStatus: SUBMITTED | VERIFIED | ASSIGNED | RESCUE_IN_PROGRESS | RESOLVED | REJECTED | DUPLICATE | CANCELLED
+// TeamAvailability: AVAILABLE | ASSIGNED | ON_THE_WAY | RESCUE_IN_PROGRESS
+// AssignmentStatus: ASSIGNED | ACKNOWLEDGED | ON_THE_WAY | RESCUE_IN_PROGRESS | COMPLETED | CANCELLED
+// VolunteerTaskStatus: ASSIGNED | ACCEPTED | DECLINED | IN_PROGRESS | COMPLETED | CANCELLED
+// ShelterStatus: OPEN | FULL | TEMPORARILY_CLOSED | CLOSED
+// ResourceRequestStatus: PENDING | APPROVED | PARTIALLY_FULFILLED | FULFILLED | REJECTED | CANCELLED
+// AllocationStatus: ALLOCATED | IN_TRANSIT | DELIVERED | CANCELLED
+// NotificationType: REQUEST_UPDATE | ASSIGNMENT | SHELTER_ALERT | PUBLIC_ALERT | RESOURCE_UPDATE | SYSTEM
+
+model User {
+  id                 String   @id @default(cuid())
+  name               String
+  email              String   @unique
+  phone              String?
+  passwordHash       String
+  role               String   @default("CITIZEN")
+  // Role-profile fields (single-table inheritance from class diagram:
+  // Citizen.address / Volunteer.skills / NGO.org / Admin.authority / ShelterManager.contact)
+  address            String?
+  skills             String? // comma-separated, e.g. "FIRST_AID,LOGISTICS"
+  availability       String? // e.g. "FULL_TIME" | "WEEKENDS"
+  serviceArea        String?
+  organizationName   String?
+  registrationNumber String?
+  authority          String?
+  contactNumber      String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  emergencyRequests      EmergencyRequest[]   @relation("Requester")
+  volunteerTasks         VolunteerTask[]      @relation("VolunteerTasks")
+  volunteerTasksAssigned VolunteerTask[]      @relation("VolunteerTaskAssigner")
+  assignmentsCreated     RescueAssignment[]   @relation("AssignedBy")
+  resourceRequests       ResourceRequest[]    @relation("ResourceRequester")
+  allocationsAuthorized  ResourceAllocation[] @relation("AllocatedBy")
+  notifications          Notification[]       @relation("Recipient")
+  auditLogs              AuditLog[]           @relation("Actor")
+  sheltersManaged        Shelter[]            @relation("ShelterManager")
+  inventoriesManaged     Inventory[]          @relation("InventoryManager")
+  rescueTeamProfile      RescueTeam?
+}
+
+model Disaster {
+  id           String   @id @default(cuid())
+  name         String // e.g. "Mumbai Floods 2026"
+  type         String // FLOOD | EARTHQUAKE | FIRE | ...
+  affectedArea String
+  severity     String // LOW | MODERATE | SEVERE | CRITICAL
+  status       String   @default("ACTIVE")
+  startDate    DateTime
+  requests     EmergencyRequest[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EmergencyRequest {
+  id             String            @id @default(cuid())
+  requesterId    String
+  requester      User              @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  disasterId     String?
+  disaster       Disaster?         @relation(fields: [disasterId], references: [id], onDelete: SetNull)
+  emergencyType  String // EmergencyType
+  description    String
+  location       String
+  latitude       Float?
+  longitude      Float?
+  peopleAffected Int
+  injuryPresent  Boolean           @default(false)
+  injurySeverity String? // NONE | MINOR | MODERATE | SEVERE
+  priority       String            @default("MEDIUM")
+  status         String            @default("SUBMITTED")
+  duplicateOfId  String?
+  duplicateOf    EmergencyRequest? @relation("DuplicateLink", fields: [duplicateOfId], references: [id], onDelete: SetNull)
+  duplicates     EmergencyRequest[] @relation("DuplicateLink")
+  assignments    RescueAssignment[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([requesterId])
+  @@index([disasterId])
+  @@index([createdAt])
+}
+
+model RescueTeam {
+  id                 String             @id @default(cuid())
+  name               String             @unique
+  teamType           String // FIRE | FLOOD_RESCUE | MEDICAL | STRUCTURAL ...
+  memberCount        Int
+  capability         String // comma-separated capabilities
+  currentLocation    String
+  latitude           Float?
+  longitude          Float?
+  availabilityStatus String             @default("AVAILABLE")
+  userId             String?            @unique
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  assignments        RescueAssignment[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model RescueAssignment {
+  id           String           @id @default(cuid())
+  requestId    String
+  request      EmergencyRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         RescueTeam       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  assignedById String
+  assignedBy   User             @relation("AssignedBy", fields: [assignedById], references: [id])
+  status       String           @default("ASSIGNED")
+  assignedAt   DateTime         @default(now())
+  completedAt  DateTime?
+  report       RescueReport?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([requestId])
+  @@index([teamId])
+  @@index([status])
+}
+
+model RescueReport {
+  id            String           @id @default(cuid())
+  assignmentId  String           @unique
+  assignment    RescueAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  peopleRescued Int              @default(0)
+  injuredPeople Int              @default(0)
+  notes         String?
+  completedAt   DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+}
+
+model VolunteerTask {
+  id           String   @id @default(cuid())
+  volunteerId  String
+  volunteer    User     @relation("VolunteerTasks", fields: [volunteerId], references: [id], onDelete: Cascade)
+  title        String
+  taskType     String // FIRST_AID | LOGISTICS | COOKING | COMMUNICATION | DISTRIBUTION
+  location     String
+  status       String   @default("ASSIGNED")
+  assignedById String?
+  assignedBy   User?    @relation("VolunteerTaskAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([volunteerId])
+  @@index([status])
+}
+
+model Shelter {
+  id                String   @id @default(cuid())
+  managerId         String
+  manager           User     @relation("ShelterManager", fields: [managerId], references: [id], onDelete: Cascade)
+  name              String
+  location          String
+  latitude          Float?
+  longitude         Float?
+  totalCapacity     Int
+  currentOccupancy  Int      @default(0)
+  facilities        String // comma-separated: "FOOD,WATER,MEDICAL,SANITATION"
+  operatingStatus   String   @default("OPEN")
+  emergencyOverride Boolean  @default(false)
+  resourceRequests  ResourceRequest[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([operatingStatus])
+  @@index([managerId])
+}
+
+model ReliefItem {
+  id               String            @id @default(cuid())
+  itemName         String
+  category         String // FOOD | WATER | MEDICINE | CLOTHING | HYGIENE | EQUIPMENT
+  unit             String // kg | litres | packets | bottles | kits
+  inventories      Inventory[]
+  resourceRequests ResourceRequest[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([itemName, category])
+}
+
+model Inventory {
+  id                String               @id @default(cuid())
+  itemId            String
+  item              ReliefItem           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  location          String
+  organization      String?
+  quantityAvailable Int                  @default(0)
+  managedById       String?
+  managedBy         User?                @relation("InventoryManager", fields: [managedById], references: [id], onDelete: SetNull)
+  allocations       ResourceAllocation[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([itemId])
+}
+
+model ResourceRequest {
+  id                String   @id @default(cuid())
+  requesterId       String
+  requester         User     @relation("ResourceRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  shelterId         String?
+  shelter           Shelter? @relation(fields: [shelterId], references: [id], onDelete: SetNull)
+  itemId            String
+  item              ReliefItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  quantityRequired  Int
+  quantityFulfilled Int      @default(0)
+  priority          String   @default("MEDIUM")
+  status            String   @default("PENDING")
+  requestedAt       DateTime @default(now())
+  allocations       ResourceAllocation[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status])
+  @@index([requesterId])
+  @@index([itemId])
+}
+
+model ResourceAllocation {
+  id                String          @id @default(cuid())
+  resourceRequestId String
+  resourceRequest   ResourceRequest @relation(fields: [resourceRequestId], references: [id], onDelete: Cascade)
+  inventoryId       String?
+  inventory         Inventory?      @relation(fields: [inventoryId], references: [id], onDelete: SetNull)
+  quantity          Int
+  allocatedById     String
+  allocatedBy       User            @relation("AllocatedBy", fields: [allocatedById], references: [id])
+  status            String          @default("ALLOCATED")
+  allocationDate    DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+
+  @@index([resourceRequestId])
+  @@index([status])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  recipientId String
+  recipient   User     @relation("Recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  message     String
+  type        String   @default("SYSTEM")
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation("Actor", fields: [actorId], references: [id], onDelete: SetNull)
+  action    String // e.g. AUTH_LOGIN | REQUEST_VERIFY | TEAM_ASSIGN | RESOURCE_ALLOCATE
+  target    String? // e.g. EmergencyRequest | RescueAssignment | ResourceAllocation
+  targetId  String?
+  metadata  String? // JSON-stringified details
+  timestamp DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([target, targetId])
+  @@index([timestamp])
+}

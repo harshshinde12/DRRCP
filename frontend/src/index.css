@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { @apply scroll-smooth; }
+  body { @apply bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100; }
+  :focus-visible { @apply outline-none ring-2 ring-brand-500 ring-offset-2 dark:ring-offset-slate-950; }
+}
+
+/* Smooth theme switching + page enter (disabled for reduced-motion users). */
+@media (prefers-reduced-motion: no-preference) {
+  body, .card, header, aside, footer { transition: background-color 0.2s ease, border-color 0.2s ease; }
+  main { animation: page-in 0.25s ease; }
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900; }
+  .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100; }
+  .label { @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400; }
+  .link { @apply text-brand-700 underline decoration-brand-300 underline-offset-2 hover:text-brand-800 dark:text-brand-300 dark:decoration-brand-800; }
+  /* slate-500 fails 4.5:1 on dark surfaces — lift bare usages (explicit dark: classes still win). */
+  .dark .text-slate-500 { @apply text-slate-400; }
+}
+
+/* Leaflet fixes: size + dark-mode tiles dim */
+.leaflet-container { @apply z-0 rounded-xl font-sans; }
+.dark .leaflet-tile-pane { filter: brightness(0.85) contrast(1.05); }
+.leaflet-popup-content-wrapper { @apply rounded-lg text-sm; }
