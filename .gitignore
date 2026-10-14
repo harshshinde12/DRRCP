@@ -27,4 +27,8 @@ test-results/
 Thumbs.db
 *.log
 .vscode/
-.idea/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/

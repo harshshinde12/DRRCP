@@ -124,6 +124,25 @@ Both servers will start concurrently:
 
 ---
 
+### 🎈 Streamlit Deployment (Python Portal)
+
+A complete interactive Streamlit portal (`app.py`) is also included for live cloud deployment:
+
+```bash
+# Run locally
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+**Deploying to Streamlit Community Cloud (Free Live Link):**
+1. Go to [share.streamlit.io](https://share.streamlit.io/) and log in with your GitHub account.
+2. Click **"New app"**.
+3. Select Repository: `harshshinde12/DRRCP`.
+4. Branch: `main` | Main file path: `app.py`.
+5. Click **"Deploy!"** — Your live app URL will be generated in seconds!
+
+---
+
 ## 🔑 Demo Accounts
 
 The project includes an active disaster simulation (**Mumbai Floods 2026**) with pre-populated incidents, teams, shelters, and supplies.
