@@ -63,7 +63,7 @@ test('pagination controls page through admin users', async ({ page }) => {
   await loginAs(page, USERS.admin);
   // Seed has ~14 users (limit 15 = single page): provision extras so the pager renders.
   const created = await page.evaluate(async () => {
-    const token = localStorage.getItem('drrcp.token');
+    const token = sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token');
     const emails: string[] = [];
     for (let i = 0; i < 4; i++) {
       const email = `e2e-page-${Date.now()}-${i}@drrcp.local`;

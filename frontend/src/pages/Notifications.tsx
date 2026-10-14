@@ -50,7 +50,7 @@ export default function Notifications() {
         ))}
       </div>
       {q.isLoading && <><Skeleton className="h-16" /><Skeleton className="h-16" /></>}
-      {q.isError && <ErrorState message="Could not load notifications." onRetry={() => void q.refetch()} />}
+      {q.isError && <ErrorState message={`Could not load notifications. ${formatApiError(q.error)}`} onRetry={() => void q.refetch()} />}
       {q.data && q.data.items.length === 0 && <EmptyState title={STR.emptyInboxTitle} hint={STR.emptyInboxHint} />}
       <Card>
         <ul className="divide-y divide-slate-100 dark:divide-slate-800">

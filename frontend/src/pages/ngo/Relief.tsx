@@ -4,9 +4,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { Button, Card, CardTitle, DataTable, EnumBadge, ErrorState, Field, Input, Modal, Select, Skeleton, formatApiError, reportFormError, useToast, type Column } from '../../components/ui.tsx';
 import { apiSendOne } from '../../lib/api-client.ts';
+import { useMeta } from '../../lib/meta.tsx';
 import { useAllocations, useInventory, useReliefItems, useResourceRequests, useShortages } from '../../lib/queries.ts';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Allocation, InventoryRecord, ResourceRequest } from '../../lib/types.ts';
+import type { Allocation, InventoryRecord, ReliefItem, ResourceRequest } from '../../lib/types.ts';
 
 const stockSchema = z.object({ itemId: z.string().min(1), location: z.string().min(1).max(300), quantityAvailable: z.coerce.number().int().min(0) });
 const allocSchema = z.object({ resourceRequestId: z.string().min(1), inventoryId: z.string().min(1), quantity: z.coerce.number().int().min(1) });
@@ -45,7 +46,10 @@ const allocCols: Column<Allocation>[] = [
 export function NgoInventory() {
   const { push } = useToast();
   const qc = useQueryClient();
+  const { options } = useMeta();
   const [showStock, setShowStock] = useState(false);
+  const [showItem, setShowItem] = useState(false);
+  const [updating, setUpdating] = useState<InventoryRecord | null>(null);
   // F-04: real pagination state (was page={1} dead controls).
   const [page, setPage] = useState(1);
   const inv = useInventory({ page, limit: 15 });
@@ -64,15 +68,23 @@ export function NgoInventory() {
     } catch (err) { reportFormError(err, { setError: setError as never, push }); }
   }
 
+  const cols: Column<InventoryRecord>[] = [
+    ...invCols,
+    { key: 'act', header: 'Actions', render: (r) => <Button variant="secondary" size="sm" onClick={() => setUpdating(r)}>Update</Button> },
+  ];
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">📦 Inventory</h1>
-        <Button onClick={() => setShowStock(true)}>+ Register stock</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setShowItem(true)}>+ New item type</Button>
+          <Button onClick={() => setShowStock(true)}>+ Register stock</Button>
+        </div>
       </div>
       {inv.isLoading && <Skeleton className="h-32" />}
       {inv.isError && <ErrorState message="Could not load inventory." onRetry={() => void inv.refetch()} />}
-      {inv.data && <DataTable rows={inv.data.items} columns={invCols} meta={inv.data.meta} page={page} onPage={setPage} emptyTitle="No stock registered" />}
+      {inv.data && <DataTable rows={inv.data.items} columns={cols} meta={inv.data.meta} page={page} onPage={setPage} emptyTitle="No stock registered" />}
       <Modal open={showStock} onClose={() => setShowStock(false)} title="Register stock">
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <Field label="Item" error={errors.itemId?.message}>
@@ -86,7 +98,76 @@ export function NgoInventory() {
           <Button type="submit" disabled={isSubmitting} className="w-full">{isSubmitting ? 'Saving…' : 'Save stock'}</Button>
         </form>
       </Modal>
+      <Modal open={showItem} onClose={() => setShowItem(false)} title="New item type">
+        <NewItemForm categories={options('itemCategories')} onDone={() => setShowItem(false)} />
+      </Modal>
+      <Modal open={updating != null} onClose={() => setUpdating(null)} title={updating ? `Update stock · ${updating.item.itemName}` : 'Update stock'}>
+        {updating && <UpdateStockForm record={updating} onDone={() => setUpdating(null)} />}
+      </Modal>
     </div>
+  );
+}
+
+/** NGO declares a brand-new relief item type (what all do I have starts here). */
+const itemSchema = z.object({ itemName: z.string().min(2).max(200), category: z.string().min(1), unit: z.string().min(1).max(30) });
+
+function NewItemForm({ categories, onDone }: { categories: Array<{ value: string; label: string }>; onDone: () => void }) {
+  const { push } = useToast();
+  const qc = useQueryClient();
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof itemSchema>>({ resolver: zodResolver(itemSchema) });
+  async function onSubmit(data: z.infer<typeof itemSchema>) {
+    try {
+      await apiSendOne<ReliefItem>('post', '/relief-items', 'item', data);
+      push('success', 'Item type added — now register its stock.');
+      onDone();
+      void qc.invalidateQueries({ queryKey: ['relief-items'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+    } catch (err) { reportFormError(err, { setError: setError as never, push }); }
+  }
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+      <Field label="Item name" error={errors.itemName?.message}><Input {...register('itemName')} placeholder="e.g. Rice bags" /></Field>
+      <Field label="Category" error={errors.category?.message}>
+        <Select {...register('category')}>
+          <option value="">Pick…</option>
+          {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </Select>
+      </Field>
+      <Field label="Unit" error={errors.unit?.message}><Input {...register('unit')} placeholder="e.g. bags, litres, boxes" /></Field>
+      <Button type="submit" disabled={isSubmitting} className="w-full">{isSubmitting ? 'Saving…' : 'Add item type'}</Button>
+    </form>
+  );
+}
+
+/** NGO corrects/restocks an existing stock row (how much I have right now). */
+const restockSchema = z.object({ quantityAvailable: z.coerce.number().int().min(0), location: z.string().min(1).max(300), organization: z.string().max(200).optional() });
+
+function UpdateStockForm({ record, onDone }: { record: InventoryRecord; onDone: () => void }) {
+  const { push } = useToast();
+  const qc = useQueryClient();
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<z.infer<typeof restockSchema>>({
+    resolver: zodResolver(restockSchema),
+    defaultValues: { quantityAvailable: record.quantityAvailable, location: record.location, organization: record.organization ?? '' },
+  });
+  async function onSubmit(data: z.infer<typeof restockSchema>) {
+    try {
+      await apiSendOne('patch', `/inventory/${record.id}`, 'inventory', { ...data, organization: data.organization || undefined });
+      push('success', 'Stock updated — admins and shortage tracking see it instantly.');
+      onDone();
+      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      void qc.invalidateQueries({ queryKey: ['shortages'] });
+      void qc.invalidateQueries({ queryKey: ['dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+    } catch (err) { reportFormError(err, { setError: setError as never, push }); }
+  }
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+      <p className="text-sm text-slate-500">{record.item.itemName} · currently <strong>{record.quantityAvailable} {record.item.unit}</strong> @ {record.location}</p>
+      <Field label="Quantity available" error={errors.quantityAvailable?.message}><Input type="number" min={0} {...register('quantityAvailable')} /></Field>
+      <Field label="Location" error={errors.location?.message}><Input {...register('location')} /></Field>
+      <Field label="Organization (optional)" error={errors.organization?.message}><Input {...register('organization')} /></Field>
+      <Button type="submit" disabled={isSubmitting} className="w-full">{isSubmitting ? 'Saving…' : 'Save stock level'}</Button>
+    </form>
   );
 }
 

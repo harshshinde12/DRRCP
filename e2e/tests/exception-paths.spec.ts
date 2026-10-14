@@ -54,7 +54,7 @@ test('unavailable team requires override reason, then force-assigns', async ({ p
 
   // Alpha Flood Rescue is ASSIGNED in seed → find its id via API
   const teams = await adminPage.evaluate(async () => {
-    const r = await fetch('/api/teams?limit=50', { headers: { Authorization: `Bearer ${localStorage.getItem('drrcp.token')}` } });
+    const r = await fetch('/api/teams?limit=50', { headers: { Authorization: `Bearer ${sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token')}` } });
     return r.json();
   });
   const alpha = teams.data.find((t: { name: string }) => t.name === 'Alpha Flood Rescue');

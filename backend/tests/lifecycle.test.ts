@@ -82,7 +82,7 @@ describe('full lifecycle: submit → verify → assign → mission → report �
     // 8. rescue unsuccessful → request additional support (admins alerted, mission stays open)
     const sup = await request(app).post(`/api/assignments/${asgId}/request-support`).set(bearer(tok.team)).send({ notes: 'Need a second boat, water rising' });
     expect(sup.status).toBe(200);
-    const adminNotif = await prisma.notification.findFirst({ where: { recipientId: fx.admin.id, type: 'ASSIGNMENT' } });
+    const adminNotif = await prisma.notification.findFirst({ where: { recipientId: fx.admin.id, type: 'ASSIGNMENT', message: { contains: 'additional support' } } });
     expect(adminNotif?.message).toMatch(/additional support/i);
 
     // 9. report → COMPLETED + team AVAILABLE + request RESOLVED (the ONLY path to RESOLVED)
@@ -90,6 +90,11 @@ describe('full lifecycle: submit → verify → assign → mission → report �
     expect(rep.status).toBe(201);
     expect((await prisma.emergencyRequest.findUnique({ where: { id: reqId } }))!.status).toBe('RESOLVED');
     expect((await prisma.rescueTeam.findUnique({ where: { id: fx.team.id } }))!.availabilityStatus).toBe('AVAILABLE');
+
+    // 9b. the generated report reaches the admin inbox for review/record
+    const reportNotif = await prisma.notification.findFirst({ where: { recipientId: fx.admin.id, type: 'ASSIGNMENT', message: { contains: 'Mission report' } } });
+    expect(reportNotif?.message).toMatch(/All safe/);
+    expect(reportNotif?.message).toContain(reqId);
 
     // repeat report is rejected
     expect((await request(app).post(`/api/assignments/${asgId}/report`).set(bearer(tok.team)).send({ peopleRescued: 1, injuredPeople: 0 })).status).toBe(409);

@@ -341,6 +341,18 @@ export async function submitReport(teamUserId: string, id: string, input: { peop
   });
   await writeAuditLog({ actorId: teamUserId, action: 'RESCUE_REPORT', target: 'RescueReport', targetId: result.id, metadata: { assignmentId: id, ...input } });
   await logRequestTransition(teamUserId, assignment.requestId, transition.requesterId, 'REQUEST_RESOLVE', transition.from, 'RESOLVED', { metadata: { assignmentId: id, reportId: result.id } });
+  // FR-16: the generated mission report goes to every admin for review/record.
+  // (Previously only the citizen was notified — admins never saw that a mission
+  // finished. Same ASSIGNMENT channel as support requests, so it lands in the
+  // admin bell + /notifications inbox; full text lives on GET /requests/:id.)
+  const notesExcerpt = (input.notes ?? '').trim().slice(0, 500);
+  await notifyAdmins(
+    `Mission report — Team ${assignment.team.name} completed "${assignment.request.location}" ` +
+    `(request ${assignment.requestId}): ${input.peopleRescued} rescued, ${input.injuredPeople} injured.` +
+    (notesExcerpt ? ` Notes: ${notesExcerpt}` : ' No notes filed.') +
+    ` [report ${result.id}]`,
+    'ASSIGNMENT',
+  );
   return result;
 }
 

@@ -12,7 +12,7 @@ const CITIZEN2_PHONE = '+91-9000000012';
 async function requestIdBySearch(page: Parameters<typeof loginAs>[0], text: string) {
   return page.evaluate(async (q) => {
     const r = await fetch(`/api/requests?search=${encodeURIComponent(q)}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('drrcp.token')}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token')}` },
     });
     const j = await r.json();
     return j.data[0].id as string;

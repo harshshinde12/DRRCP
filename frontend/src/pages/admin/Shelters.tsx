@@ -17,7 +17,9 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
   const { push } = useToast();
   const qc = useQueryClient();
   const [occupancy, setOccupancy] = useState(shelter.currentOccupancy);
+  const [capacity, setCapacity] = useState(shelter.totalCapacity);
   const [status, setStatus] = useState(shelter.operatingStatus);
+  const [facilities, setFacilities] = useState(shelter.facilities);
   const [override, setOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideError, setOverrideError] = useState<string | null>(null);
@@ -30,7 +32,9 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
   });
   async function save() {
     setError(null); setOverrideError(null);
-    const overCapacity = occupancy > shelter.totalCapacity;
+    const beds = Math.floor(Number(capacity) || 0);
+    if (beds < 1) { setError('Total capacity must be at least 1 bed.'); return; }
+    const overCapacity = occupancy > beds;
     if (overCapacity && !override) {
       setError('Occupancy exceeds capacity — tick the emergency override and give a reason.');
       return;
@@ -42,7 +46,9 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
     try {
       await mut.mutateAsync({
         currentOccupancy: occupancy,
+        totalCapacity: beds,
         operatingStatus: status,
+        facilities: facilities.trim(),
         ...(overCapacity ? { emergencyOverride: true, overrideReason: overrideReason.trim() } : { emergencyOverride: override || undefined }),
       });
       push('success', overCapacity ? 'Shelter updated (override logged).' : 'Shelter updated.');
@@ -50,18 +56,23 @@ function OccupancyForm({ shelter, onDone }: { shelter: Shelter; onDone: () => vo
     }
     catch (err) { setError(formatApiError(err)); }
   }
-  const pct = shelter.totalCapacity ? Math.round((occupancy / shelter.totalCapacity) * 100) : 0;
+  const bedsNow = Math.floor(Number(capacity) || 0);
+  const pct = bedsNow ? Math.round((occupancy / bedsNow) * 100) : 0;
   return (
     <div className="space-y-3">
       <div>
-        <div className="flex justify-between text-sm"><span>Occupancy</span><strong>{occupancy} / {shelter.totalCapacity}</strong></div>
-        <input type="range" min={0} max={Math.max(shelter.totalCapacity, occupancy + 50)} value={occupancy} onChange={(e) => setOccupancy(+e.target.value)} className="w-full accent-brand-600" aria-label="Current occupancy" />
+        <div className="flex justify-between text-sm"><span>Occupancy</span><strong>{occupancy} / {bedsNow}</strong></div>
+        <input type="range" min={0} max={Math.max(bedsNow, occupancy + 50)} value={occupancy} onChange={(e) => setOccupancy(+e.target.value)} className="w-full accent-brand-600" aria-label="Current occupancy" />
         <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
           <div className={`h-full ${pct > 100 ? 'bg-red-600' : pct >= 95 ? 'bg-red-500' : pct >= 75 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
       </div>
-      <Field label="Operating status"><Select value={status} onChange={(e) => setStatus(e.target.value)}>{options('shelterStatuses').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></Field>
-      {occupancy > shelter.totalCapacity && (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Total beds (capacity)"><Input type="number" min={1} value={capacity} onChange={(e) => setCapacity(Number(e.target.value))} aria-label="Total capacity" /></Field>
+        <Field label="Operating status"><Select value={status} onChange={(e) => setStatus(e.target.value)}>{options('shelterStatuses').map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</Select></Field>
+      </div>
+      <Field label="Facilities (comma separated)"><Input value={facilities} onChange={(e) => setFacilities(e.target.value)} /></Field>
+      {occupancy > bedsNow && (
         <div className="space-y-2 rounded-lg bg-red-50 p-2.5 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
           <label className="flex items-start gap-2">
             <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} className="mt-0.5" aria-label="Emergency override" />

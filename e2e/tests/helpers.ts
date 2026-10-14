@@ -53,3 +53,10 @@ export function assertNoConsoleErrors(errors: string[]) {
 export function uniqueCitizenEmail(tag: string) {
   return `e2e-${tag}-${Date.now()}@drrcp.local`;
 }
+
+/**
+ * Token lookup mirroring the app's sessionStorage-first store
+ * (frontend/src/lib/api-client.ts `getToken()`): per-tab session with
+ * legacy localStorage fallback. Use inside `page.evaluate`.
+ */
+export const TEST_TOKEN_EXPR = `sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token')`;

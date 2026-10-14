@@ -106,6 +106,30 @@ function TriageDrawer({ requestId, onClose }: { requestId: string | null; onClos
                 <div className="mt-3"><StatusTimeline status={r.status} missionStatus={r.missionStatus} displayStatus={r.displayStatus} /></div>
               </div>
 
+              {hasAssignments && (
+                <section aria-label="Mission reports" className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                  <h3 className="text-sm font-bold">📋 Dispatch &amp; reports</h3>
+                  <ul className="mt-2 space-y-2">
+                    {r.assignments.map((a) => (
+                      <li key={a.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs dark:border-slate-700 dark:bg-slate-900">
+                        <div className="flex flex-wrap items-center justify-between gap-1.5">
+                          <strong>{a.team.name}</strong>
+                          <EnumBadge group="assignmentStatuses" value={a.status} />
+                        </div>
+                        {a.report ? (
+                          <div className="mt-1">
+                            <p>✓ {a.report.peopleRescued} rescued · {a.report.injuredPeople} injured · {new Date(a.report.completedAt).toLocaleString()}</p>
+                            {a.report.notes && <p className="mt-1 text-slate-600 dark:text-slate-300">“{a.report.notes}”</p>}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-slate-500">No report filed yet — mission {a.status.toLowerCase().replace(/_/g, ' ')}.</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
               {r.status === 'SUBMITTED' && (
                 <section aria-label="Verify" className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                   <h3 className="text-sm font-bold">1 · Verify</h3>

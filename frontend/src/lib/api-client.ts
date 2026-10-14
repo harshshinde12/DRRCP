@@ -3,13 +3,71 @@ import axios, { AxiosError, type AxiosRequestConfig } from 'axios';
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
 
 const TOKEN_KEY = 'drrcp.token';
+const TOKEN_EVENT = 'drrcp:token-change';
 
+/**
+ * Per-tab session auth.
+ *
+ * Tokens live in `sessionStorage` so each browser tab keeps its own isolated
+ * session (Admin in tab A + Citizen in tab B no longer clobber each other,
+ * which previously caused cross-tab 403s and login retry storms).
+ * `sessionStorage` survives tab refresh but is never shared across tabs —
+ * exactly the semantics this app needs. Theme prefs etc. intentionally stay
+ * in `localStorage`; only the JWT moved.
+ *
+ * `getToken()` falls back to the legacy `localStorage` entry (pre-migration
+ * sessions) and migrates it into this tab's `sessionStorage` on read.
+ */
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  try {
+    const fromSession = sessionStorage.getItem(TOKEN_KEY);
+    if (fromSession) return fromSession;
+  } catch {
+    // sessionStorage unavailable (SSR / private mode) — fall through to legacy.
+  }
+  try {
+    const legacy = localStorage.getItem(TOKEN_KEY);
+    if (legacy) {
+      // One-time per-tab migration so a refresh keeps working after the move.
+      try { sessionStorage.setItem(TOKEN_KEY, legacy); } catch { /* ignore */ }
+      return legacy;
+    }
+  } catch {
+    // storage unavailable — treat as logged out.
+  }
+  return null;
 }
+
 export function setToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch { /* ignore */ }
+  // Drop the legacy shared copy so it can never bleed into another tab again.
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent<string | null>(TOKEN_EVENT, { detail: token }));
+}
+
+/** Clear this tab's session (alias for `setToken(null)`). */
+export function clearToken() {
+  setToken(null);
+}
+
+/**
+ * Fallback/utility for API requests outside the axios interceptor
+ * (fetch calls, Playwright probes, manual headers).
+ * Returns `{ Authorization: 'Bearer <token>' }` or an empty object.
+ */
+export function getAuthHeader(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Subscribe to same-tab token changes (login/logout). Returns unsubscribe. */
+export function onTokenChange(listener: (token: string | null) => void): () => void {
+  const handler = (e: Event) => listener((e as CustomEvent<string | null>).detail ?? getToken());
+  window.addEventListener(TOKEN_EVENT, handler);
+  return () => window.removeEventListener(TOKEN_EVENT, handler);
 }
 
 export interface ApiErrorShape { status: number; message: string; details?: unknown; }
@@ -77,7 +135,12 @@ export interface Paged<T> { items: T[]; meta: import('./types.ts').PageMeta; }
  * fallback below only tolerates a single-key wrapper from older stubs.
  */
 export async function getPaged<T>(path: string, params?: Record<string, unknown>): Promise<Paged<T>> {
-  const res = await apiClient.get(path, { params });
+  // Drop empty filter values ('' / null / undefined) before sending: list
+  // endpoints validate enums strictly, so `?type=` would 400. Keep false/0.
+  const cleanParams = params
+    ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== ''))
+    : undefined;
+  const res = await apiClient.get(path, { params: cleanParams });
   const body = res.data as { success: boolean; data: T[] | Record<string, unknown>; meta: Paged<T>['meta'] };
   const data = body.data as T[] | Record<string, T[]>;
   const items = Array.isArray(data) ? data : (Object.values(data).find(Array.isArray) as T[] | undefined) ?? [];

@@ -38,7 +38,7 @@ test('rescue team cannot see unassigned requests', async ({ browser }) => {
   // The fresh request never appears in the team's list…
   const ids = await team.evaluate(async () => {
     const r = await fetch('/api/requests?limit=100', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('drrcp.token')}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token')}` },
     });
     const j = await r.json();
     return (j.data as Array<{ id: string }>).map((x) => x.id);
@@ -48,7 +48,7 @@ test('rescue team cannot see unassigned requests', async ({ browser }) => {
   // …and direct detail access is fenced with 403.
   const status = await team.evaluate(async (id: string) => {
     const r = await fetch(`/api/requests/${id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('drrcp.token')}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('drrcp.token') ?? localStorage.getItem('drrcp.token')}` },
     });
     return r.status;
   }, reqId);
